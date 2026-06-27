@@ -1,0 +1,40 @@
+{
+  "name": "faillens",
+  "version": "0.1.0",
+  "description": "Relatório HTML local e automático para testes de API com Cypress.",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "faillens": "./bin/faillens.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rimraf dist",
+    "pretest": "npm run build",
+    "prepublishOnly": "npm run clean && npm run build",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "cypress",
+    "api-testing",
+    "reporter",
+    "html-report",
+    "debugging"
+  ],
+  "devDependencies": {
+    "@types/node": "^26.0.1",
+    "rimraf": "^6.1.3",
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.faillens/
+reports/
+*.tgz
+npm-debug.log*
+work/
+outputs/
