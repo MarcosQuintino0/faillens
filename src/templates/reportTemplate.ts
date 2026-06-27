@@ -13,18 +13,19 @@ function escapeHtml(value: string): string {
 }
 
 function safeEmbeddedJson(value: unknown): string {
-  return JSON.stringify(value).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
 }
 
 function duration(ms: number): string {
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
+  return ms >= 1000 ? `${(ms / 1000).toFixed(2).replace(/0$/, "")}s` : `${Math.round(ms)}ms`;
 }
 
 export function reportTemplate(report: FailLensReport): string {
   const project = report.project?.name || report.specs[0]?.specPath || "Projeto Cypress";
-  const context = [report.project?.runId && `Run ${report.project.runId}`, report.project?.branch]
-    .filter(Boolean)
-    .join(" · ");
+  const passedText = `${report.summary.passed} de ${report.summary.tests} testes passaram`;
   return `<!doctype html>
 <html lang="pt-BR" data-theme="${report.theme || "dark"}">
 <head>
@@ -35,24 +36,30 @@ export function reportTemplate(report: FailLensReport): string {
   <style>${styles}</style>
 </head>
 <body>
-  <div class="app">
-    <header class="topbar">
-      <div class="brand"><div class="brand-mark">F</div><div><h1>${escapeHtml(project)}</h1><p>${escapeHtml(context || "Relatório local FailLens")}</p></div></div>
-      <div class="run-stats">
-        <div class="run-stat"><strong>${report.summary.passRate}%</strong><span>Sucesso</span></div>
-        <div class="run-stat"><strong>${report.summary.failed}</strong><span>Erros</span></div>
-        <div class="run-stat"><strong>${report.summary.requests}</strong><span>Requests</span></div>
-        <div class="run-stat"><strong>${duration(report.summary.durationMs)}</strong><span>Tempo</span></div>
+  <div class="page">
+    <div class="report-shell">
+      <header class="topbar">
+        <div class="run-summary">
+          <div class="summary-item success-summary">
+            <div class="summary-ring" style="--progress:${Math.max(0, Math.min(100, report.summary.passRate)) * 3.6}deg"><span></span></div>
+            <div><strong>${Math.round(report.summary.passRate)}% <small>passou</small></strong><p>${escapeHtml(passedText)}</p></div>
+          </div>
+          <div class="summary-item error-summary"><div class="summary-icon">!</div><div><strong>${report.summary.failed} ${report.summary.failed === 1 ? "erro" : "erros"}</strong><p>${report.summary.failed} ${report.summary.failed === 1 ? "falha geral" : "falhas gerais"}</p></div></div>
+          <div class="summary-item time-summary"><div class="summary-icon clock-icon"></div><div><strong>${duration(report.summary.durationMs)}</strong><p>Tempo geral</p></div></div>
+        </div>
+        <div class="top-actions">
+          <button id="theme-toggle" class="button subtle" aria-label="Alternar tema"><span class="theme-symbol">◐</span><span id="theme-label">Tema claro</span></button>
+          <button id="export-report" class="button export-button"><span>↓</span> Exportar relatório</button>
+        </div>
+      </header>
+      <div class="workspace">
+        <aside class="sidebar">
+          <div class="search-wrap"><span>⌕</span><input id="filter" class="search" type="search" placeholder="Filtrar testes…" aria-label="Filtrar testes"></div>
+          <div class="chips"><button class="chip" data-mode="failed">Falhas · ${report.summary.failed}</button><button class="chip" data-mode="all">Tudo · ${report.summary.tests}</button></div>
+          <div id="test-list"></div>
+        </aside>
+        <main id="detail" class="main"></main>
       </div>
-      <div class="top-actions"><button id="export-report" class="button">Exportar</button><button id="theme-toggle" class="button" aria-label="Alternar tema">◐</button></div>
-    </header>
-    <div class="workspace">
-      <aside class="sidebar">
-        <input id="filter" class="search" type="search" placeholder="Filtrar testes ou specs…" aria-label="Filtrar testes">
-        <div class="chips"><button class="chip" data-mode="failed">Falhas</button><button class="chip" data-mode="all">Tudo</button></div>
-        <div id="test-list"></div>
-      </aside>
-      <main id="detail" class="main"></main>
     </div>
   </div>
   <div id="toast" class="toast" role="status"></div>

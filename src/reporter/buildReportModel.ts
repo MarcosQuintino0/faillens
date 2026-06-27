@@ -3,6 +3,7 @@ import { maskSensitiveData, maskSensitiveText, maskUrl } from "../collector/sens
 import type { ResolvedFailLensConfig } from "../types/config";
 import type {
   FailLensError,
+  FailLensAssertion,
   FailLensReport,
   FailLensRequest,
   FailLensSpec,
@@ -205,6 +206,37 @@ function sanitizeRequest(request: FailLensRequest, maskFields: string[]): FailLe
   return sanitized;
 }
 
+function prepareAssertions(
+  source: FailLensTest,
+  error: FailLensError | undefined,
+  maskFields: string[],
+): FailLensAssertion[] {
+  if (source.assertions?.length) {
+    return source.assertions.map((assertion, index) => ({
+      ...assertion,
+      id: assertion.id || `assertion-${index + 1}`,
+      title: maskSensitiveText(assertion.title || "Assertion observada", maskFields),
+      message: assertion.message
+        ? maskSensitiveText(assertion.message, maskFields)
+        : undefined,
+      expected: maskSensitiveData(assertion.expected, maskFields),
+      actual: maskSensitiveData(assertion.actual, maskFields),
+    }));
+  }
+  if (!error) return [];
+  return [{
+    id: "assertion-failure",
+    title: error.assertionMessage || "Assertion principal",
+    state: "failed",
+    message: error.message,
+    expected: error.expected,
+    actual: error.actual,
+    file: error.file,
+    line: error.line,
+    column: error.column,
+  }];
+}
+
 function prepareTest(source: FailLensTest, maskFields: string[]): FailLensTest {
   const test: FailLensTest = {
     ...source,
@@ -212,6 +244,7 @@ function prepareTest(source: FailLensTest, maskFields: string[]): FailLensTest {
     requests: source.requests.map((request) => sanitizeRequest(request, maskFields)),
   };
   const main = inferMainRequest(test);
+  test.assertions = prepareAssertions(source, test.error, maskFields);
   test.mainRequestId = main?.id;
   annotateRequests(test, main);
   test.diagnosis = diagnoseFailure({ test, mainRequest: main });

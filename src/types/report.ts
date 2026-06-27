@@ -7,6 +7,8 @@ export type RequestPhase =
 
 export type TestState = "passed" | "failed" | "skipped" | "unknown";
 
+export type AssertionState = "passed" | "failed" | "pending" | "skipped" | "unknown";
+
 export interface FailLensError {
   name: string;
   message: string;
@@ -41,6 +43,18 @@ export interface FailLensDiagnosis {
   suggestedAction: string;
 }
 
+export interface FailLensAssertion {
+  id: string;
+  title: string;
+  state: AssertionState;
+  message?: string;
+  expected?: unknown;
+  actual?: unknown;
+  file?: string;
+  line?: number;
+  column?: number;
+}
+
 export interface FailLensRequest {
   id: string;
   order: number;
@@ -70,6 +84,7 @@ export interface FailLensTest {
   durationMs: number;
   error?: FailLensError;
   diagnosis?: FailLensDiagnosis;
+  assertions?: FailLensAssertion[];
   requests: FailLensRequest[];
   mainRequestId?: string;
   reproductionScript?: string;

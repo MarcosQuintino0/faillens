@@ -91,6 +91,9 @@ test("monta relatório, infere request principal, fase, variável e diagnóstico
   assert.equal(item.requests[0].phase, "validacao");
   assert.deepEqual(item.requests[0].generatedVariables, ["$USER_ID", "$TOKEN"]);
   assert.equal(item.diagnosis.category, "validation-not-applied");
+  assert.equal(item.assertions.length, 1);
+  assert.equal(item.assertions[0].state, "failed");
+  assert.equal(item.assertions[0].expected, 400);
   assert.doesNotMatch(JSON.stringify(report), /segredo|"123"/);
 });
 
@@ -101,8 +104,11 @@ test("gera HTML offline autocontido e sem segredos", async () => {
   const html = await fs.readFile(file, "utf8");
   assert.match(html, /<!doctype html>/i);
   assert.match(html, /Sequência de chamadas/);
+  assert.match(html, /Motivo da falha/);
+  assert.match(html, /Esperado vs\. recebido/);
+  assert.match(html, /Copiar sequência completa/);
   assert.match(html, /faillens-data/);
-  assert.doesNotMatch(html, /segredo|fonts\.googleapis|cdn\./i);
+  assert.doesNotMatch(html, /segredo|fonts\.googleapis|cdn\.|<link[^>]+stylesheet|<script[^>]+src=/i);
 });
 
 test("init adiciona script e não sobrescreve valor existente", async () => {
