@@ -59,6 +59,8 @@ test("run instrumenta consumidor, gera os dois relatórios e preserva exit code"
   const html = await fs.readFile(htmlPath, "utf8");
   assert.equal(report.summary.failed, 1);
   assert.equal(report.summary.requests, 1);
+  assert.equal(report.specs[0].tests[0].title, "falha");
+  assert.deepEqual(report.specs[0].tests[0].titlePath, ["Suite", "falha"]);
   assert.equal(report.specs[0].tests[0].diagnosis.category, "validation-not-applied");
   assert.doesNotMatch(JSON.stringify(report), /Bearer real|password":"real/);
   assert.match(html, /FailLens/);

@@ -84,7 +84,9 @@ export class RequestStore {
     this.currentSpecPath = payload.specPath || this.currentSpecPath;
     const spec = this.getSpec(this.currentSpecPath);
     const titlePath = payload.titlePath?.map(String).filter(Boolean);
-    const title = titlePath?.length ? titlePath.join(" > ") : String(payload.title || "Teste sem título");
+    const title = titlePath?.length
+      ? titlePath[titlePath.length - 1]
+      : String(payload.title || "Teste sem título");
     const id = payload.id || createId("test");
     let test = spec.tests.find((item) => item.id === id);
     if (!test) {
@@ -180,7 +182,7 @@ export class RequestStore {
       if (!test) {
         test = {
           id: createId("test"),
-          title: titleParts.join(" > "),
+          title: titleParts[titleParts.length - 1] || "Teste sem título",
           titlePath: titleParts,
           state: normalizeState(resultTest.state),
           durationMs: 0,

@@ -107,6 +107,8 @@ test("gera HTML offline autocontido e sem segredos", async () => {
   assert.match(html, /Motivo da falha/);
   assert.match(html, /Esperado vs\. recebido/);
   assert.match(html, /Copiar sequência completa/);
+  assert.match(html, /sequence-legend/);
+  assert.match(html, /request-row/);
   assert.match(html, /faillens-data/);
   assert.doesNotMatch(html, /segredo|fonts\.googleapis|cdn\.|<link[^>]+stylesheet|<script[^>]+src=/i);
 });

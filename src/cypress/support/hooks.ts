@@ -57,7 +57,7 @@ export function installFailLensHooks(): void {
     currentContext = {
       testId: stableId(specPath, titlePath),
       specPath,
-      title: titlePath.join(" > "),
+      title: titlePath[titlePath.length - 1] || "Teste sem título",
       titlePath,
     };
     cy.task(

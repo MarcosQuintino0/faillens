@@ -240,6 +240,9 @@ function prepareAssertions(
 function prepareTest(source: FailLensTest, maskFields: string[]): FailLensTest {
   const test: FailLensTest = {
     ...source,
+    title: source.titlePath?.length
+      ? source.titlePath[source.titlePath.length - 1]
+      : source.title,
     error: maskError(source.error, maskFields),
     requests: source.requests.map((request) => sanitizeRequest(request, maskFields)),
   };

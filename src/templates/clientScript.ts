@@ -132,20 +132,41 @@ export const clientScript = String.raw`
     return fallback;
   }
 
-  function requestCards(test) {
+  function chainedUrl(request) {
+    var url = String(request.originalUrl || request.url || "");
+    if (/^https?:\/\//i.test(url)) {
+      try {
+        var parsed = new URL(url);
+        url = parsed.pathname + parsed.search + parsed.hash;
+      } catch (_) {}
+    }
+    var identifier = (request.usedVariables || []).find(function (name) { return /_ID$/.test(name); });
+    if (identifier && url.indexOf(identifier) < 0) {
+      url = url.replace(/\/[^/?#]+(?=[?#]|$)/, "/" + identifier);
+    }
+    return url;
+  }
+
+  function requestRows(test) {
     var maximum = Math.max.apply(null, test.requests.map(function (request) { return Number(request.durationMs || 0); }).concat([1]));
     return test.requests.map(function (request) {
       var status = request.receivedStatus == null ? "SEM_RESPOSTA" : request.receivedStatus;
       var bad = Boolean(request.error) || (test.state === "failed" && request.id === test.mainRequestId);
-      var variables = [];
-      (request.generatedVariables || []).forEach(function (name) { variables.push("→ " + name); });
-      (request.usedVariables || []).forEach(function (name) { variables.push("usa " + name); });
-      return '<button class="request-card ' + (request.id === state.requestId ? 'active' : '') + '" data-request="' + e(request.id) + '">' +
-        '<div class="request-top"><span class="request-order">' + e(request.order) + '</span><span class="request-method">' + e(request.method) + '</span><span class="request-status ' + (bad ? 'bad' : '') + '">' + e(status) + '</span></div>' +
-        '<div class="request-url" title="' + e(request.originalUrl || request.url) + '">' + e(request.originalUrl || request.url) + '</div>' +
-        '<div class="request-vars">' + e(variables.join(" · ") || "sem variável encadeada") + '</div>' +
-        '<div class="request-footer"><span>' + e(request.phase) + '</span><span>' + e(duration(request.durationMs)) + ' · &lt;/&gt; cURL</span></div>' +
-        '<span class="request-timebar" style="width:' + Math.max(2, Math.round((request.durationMs || 0) / maximum * 100)) + '%"></span></button>';
+      var generated = (request.generatedVariables || [])[0];
+      var used = (request.usedVariables || [])[0];
+      var variable = generated ? "→ " + generated : used ? "usa " + used : "—";
+      var variableClass = generated ? " generated" : "";
+      var barWidth = Math.max(10, Math.round((request.durationMs || 0) / maximum * 100));
+      var methodClass = String(request.method || "get").toLowerCase();
+      return '<button class="request-row ' + (request.id === state.requestId ? 'active' : '') + '" data-request="' + e(request.id) + '">' +
+        '<span class="request-order">' + e(request.order) + '</span>' +
+        '<span class="request-method ' + e(methodClass) + '">' + e(request.method) + '</span>' +
+        '<span class="request-url" title="' + e(request.originalUrl || request.url) + '">' + e(chainedUrl(request)) + '</span>' +
+        '<span class="request-bar-track"><span class="request-bar ' + e(request.phase) + '" style="width:' + barWidth + '%"></span></span>' +
+        '<span class="request-variable' + variableClass + '">' + e(variable) + '</span>' +
+        '<span class="request-status ' + (bad ? 'bad' : '') + '">' + e(status) + '</span>' +
+        '<span class="request-time">' + e(duration(request.durationMs)) + '</span>' +
+        '<span class="request-curl">&lt;/&gt; cURL</span></button>';
     }).join("") || '<p class="empty-note">Nenhuma chamada cy.request foi capturada neste teste.</p>';
   }
 
@@ -187,9 +208,9 @@ export const clientScript = String.raw`
       ? json(test.error.actual)
       : (main && main.receivedStatus != null ? String(main.receivedStatus) : "—");
     var endpoint = main
-      ? '<span class="endpoint">' + e(report.project && report.project.name || "projeto") + ' / <span class="method">' + e(main.method) + '</span> ' + e(main.originalUrl || main.url) + '</span>'
+      ? '<span class="endpoint">' + e(report.project && report.project.name || "projeto") + ' / <span class="method">' + e(main.method) + '</span> ' + e(chainedUrl(main)) + '</span>'
       : '';
-    var selectedContext = selectedRequest ? 'passo ' + selectedRequest.order + ' · ' + selectedRequest.method + ' ' + (selectedRequest.originalUrl || selectedRequest.url) : '';
+    var selectedContext = selectedRequest ? 'passo ' + selectedRequest.order + ' · ' + selectedRequest.method + ' ' + chainedUrl(selectedRequest) : '';
     var selectedHtml = selectedRequest
       ? codePanel("cURL", selectedContext, selectedRequest.curl, "curl", "") +
         codePanel("Response body", selectedRequest.receivedStatus == null ? "sem resposta" : selectedRequest.receivedStatus + " · " + statusMeaning(selectedRequest.receivedStatus), json(selectedRequest.responseBody), "response", "") +
@@ -203,8 +224,9 @@ export const clientScript = String.raw`
       '<div class="metric-card"><span>Duração</span><strong>' + e(duration(test.durationMs)) + '</strong><small>Tempo total do teste</small></div>' +
       '<div class="metric-card"><span>Requisições</span><strong>' + e(test.requests.length) + '</strong><small>Executadas</small></div></div>' +
       failureSections(test, main, expected, actual) +
-      '<section class="panel"><div class="panel-head"><div><h3>Sequência de chamadas</h3><span class="panel-hint">Clique numa chamada para inspecionar os dados abaixo.</span></div></div><div class="panel-body">' +
-      '<div class="phase-guide"><span>Preparação</span><i></i><span>Validação</span><i></i><span>Verificação</span></div><div class="sequence">' + requestCards(test) + '</div></div></section>' +
+      '<section class="panel"><div class="panel-head sequence-head"><div><h3>Sequência de chamadas</h3><span class="panel-hint">Clique numa chamada para ver o cURL dela abaixo. Os valores encadeiam — a resposta de uma alimenta a próxima.</span></div>' +
+      '<div class="sequence-legend"><span><i class="legend-dot preparacao"></i>Preparação</span><span><i class="legend-dot validacao"></i>Validação</span><span><i class="legend-dot verificacao"></i>Verificação</span></div></div>' +
+      '<div class="panel-body sequence-scroll"><div class="sequence">' + requestRows(test) + '</div></div></section>' +
       '<section class="panel"><div class="panel-head"><div><h3>Chamada selecionada</h3><span class="panel-hint">' + e(selectedContext) + '</span></div>' +
       '<button class="copy-button" data-copy-kind="script">Copiar sequência completa</button></div><div class="panel-body selected-grid">' + selectedHtml + '</div></section>' +
       '<section class="panel reproduction"><div class="panel-head"><div><h3>Prévia · Script de reprodução</h3><span class="panel-hint">cole no terminal e execute de cima a baixo; ajuste o ambiente quando necessário</span></div>' +
