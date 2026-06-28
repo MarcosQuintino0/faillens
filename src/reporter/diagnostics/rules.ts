@@ -15,6 +15,17 @@ export interface StatusDiagnosisRule {
 
 export const STATUS_DIAGNOSIS_RULES: StatusDiagnosisRule[] = [
   {
+    category: "duplicate-conflict",
+    title: "Restrição de unicidade não foi aplicada",
+    expected: (status) => status === 409,
+    actual: (status) => SUCCESS_STATUSES.includes(status),
+    methods: ["POST", "PUT", "PATCH"],
+    summary: (_expected, actual) =>
+      `A operação que deveria ser rejeitada por conflito de unicidade foi aceita com status ${actual}.`,
+    suggestedAction:
+      "Confirme a regra de unicidade exercitada pelo teste e reproduza a chamada com o mesmo valor duplicado.",
+  },
+  {
     category: "validation-not-applied",
     title: "Payload inválido foi aceito pela API",
     expected: (status) => status === 400 || status === 422,

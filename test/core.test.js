@@ -14,6 +14,68 @@ const {
 } = require("../dist");
 const { parseAssertionError } = require("../dist/reporter/diagnostics/parseAssertionError");
 const { initCommand } = require("../dist/cli/init");
+const { extractSourceAssertions } = require("../dist/collector/extractSourceAssertions");
+const { normalizeRedirects } = require("../dist/cypress/support/autoCapture");
+
+test("normaliza o rastro de redirects exposto pelo Cypress", () => {
+  assert.deepEqual(normalizeRedirects([
+    "302: http://localhost:3333/redirect/2",
+    "302: http://localhost:3333/redirect/1",
+    "302: http://localhost:3333/final",
+  ]), [
+    { statusCode: 302, location: "http://localhost:3333/redirect/2" },
+    { statusCode: 302, location: "http://localhost:3333/redirect/1" },
+    { statusCode: 302, location: "http://localhost:3333/final" },
+  ]);
+});
+
+test("extrai o plano de assertions do spec sem executar o teste", () => {
+  const source = `
+    it('valida contrato', () => {
+      expect(response.status, 'Status deve ser 400').to.eq(400);
+      expect(
+        response.body,
+        'Body deve conter a chave error'
+      ).to.have.property('error');
+    });
+  `;
+  const planned = extractSourceAssertions(source, "api.cy.js");
+  assert.equal(planned[0].title, "valida contrato");
+  assert.deepEqual(planned[0].assertions.map((item) => item.title), [
+    "Status deve ser 400",
+    "Body deve conter a chave error",
+  ]);
+  assert.equal(planned[0].assertions[0].target, "status");
+  assert.equal(planned[0].assertions[1].target, "body");
+  assert.deepEqual(planned[0].statusExpectation, {
+    type: "exact",
+    label: "400",
+    expected: 400,
+  });
+});
+
+test("extrai conjunto e intervalo de status HTTP do source", () => {
+  const source = `
+    it('aceita erro controlado', () => {
+      expect(response.status, 'Erro esperado (4xx/5xx)').to.be.oneOf([400, 500]);
+    });
+    it('aceita qualquer 4xx', () => {
+      expect(response.status).to.be.gte(400).and.lt(500);
+    });
+  `;
+  const planned = extractSourceAssertions(source, "status.cy.js");
+  assert.deepEqual(planned[0].statusExpectation, {
+    type: "set",
+    label: "4xx/5xx",
+    values: [400, 500],
+  });
+  assert.deepEqual(planned[1].statusExpectation, {
+    type: "family",
+    label: "4xx",
+    min: 400,
+    max: 499,
+  });
+});
 
 test("normaliza as quatro assinaturas suportadas de cy.request", () => {
   assert.deepEqual(normalizeCyRequestArgs(["/health"], "http://localhost:3000"), {
@@ -45,6 +107,10 @@ test("mascara dados sensíveis em objetos, URL e cURL", () => {
   const curl = generateCurl({ method: "POST", url: "/users?apiKey=real", headers: { Authorization: "Bearer real" }, body: { senha: "real" } });
   assert.doesNotMatch(curl, /Bearer real|apiKey=real|"real"/);
   assert.match(curl, /Bearer <TOKEN>/);
+  assert.equal(
+    maskSensitiveData("Login deve devolver um token: expected **fake-jwt-token** to be a string"),
+    "Login deve devolver um token: expected *** to be a string",
+  );
 });
 
 test("extrai expected, actual e mensagem descritiva de AssertionError", () => {
@@ -89,7 +155,9 @@ test("monta relatório, infere request principal, fase, variável e diagnóstico
   assert.equal(report.summary.requests, 1);
   assert.equal(item.mainRequestId, "req-1");
   assert.equal(item.requests[0].phase, "validacao");
-  assert.deepEqual(item.requests[0].generatedVariables, ["$USER_ID", "$TOKEN"]);
+  // Encadeamento é determinístico: um valor só vira variável se for reusado por
+  // um request POSTERIOR. Com um único request, nada encadeia.
+  assert.deepEqual(item.requests[0].generatedVariables, []);
   assert.equal(item.diagnosis.category, "validation-not-applied");
   assert.equal(item.assertions.length, 1);
   assert.equal(item.assertions[0].state, "failed");
@@ -106,9 +174,13 @@ test("gera HTML offline autocontido e sem segredos", async () => {
   assert.match(html, /Sequência de chamadas/);
   assert.match(html, /Motivo da falha/);
   assert.match(html, /Esperado vs\. recebido/);
-  assert.match(html, /Copiar sequência completa/);
+  assert.match(html, /Script de reprodução/);
+  assert.match(html, /data-detail-tab="script"/);
+  assert.match(html, /diff-line/);
+  assert.match(html, /Copiado para a área de transferência/);
   assert.match(html, /sequence-legend/);
   assert.match(html, /request-row/);
+  assert.doesNotMatch(html, /request-variable/);
   assert.match(html, /faillens-data/);
   assert.doesNotMatch(html, /segredo|fonts\.googleapis|cdn\.|<link[^>]+stylesheet|<script[^>]+src=/i);
 });

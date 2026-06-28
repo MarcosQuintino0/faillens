@@ -74,7 +74,8 @@ Para cada teste, o FailLens registra:
 - `failOnStatusCode` sem modificar seu valor;
 - cURL sanitizado;
 - request principal e fases de preparação, validação, verificação e limpeza;
-- expected/actual de assertions reconhecidas;
+- plano de assertions do teste, com estados passou, falhou, pendente ou ignorada;
+- expected/actual e linha exata da assertion quando disponíveis;
 - diagnóstico baseado em regras e uma prévia shell de reprodução.
 
 O diagnóstico não tenta adivinhar a implementação do backend. Ele usa linguagem cuidadosa e somente evidências presentes no teste e nas respostas capturadas.
@@ -142,9 +143,11 @@ O relatório abre no tema escuro por padrão e oferece:
 - filtros por texto, falhas ou todos os testes;
 - cards de status esperado/atual, duração e quantidade de requests;
 - diagnóstico determinístico com evidências e ação sugerida;
-- assertion, expected/actual e localização quando disponível;
+- assertions em ordem, incluindo o ponto em que o teste parou;
+- comparação expected/actual com destaque visual da linha divergente;
 - sequência de chamadas com fase, status, duração e barra temporal;
 - request/response bodies e cURL copiável;
+- abas para a chamada selecionada e o script completo de reprodução;
 - detecção de `$TOKEN`, `$USER_ID`, `$ORDER_ID` e `$RESOURCE_ID`;
 - prévia de reprodução shell com variáveis encadeadas;
 - exportação do JSON e alternância de tema.
@@ -235,7 +238,7 @@ O código TypeScript fica em `src/`, e o build CommonJS com declarações fica e
 - `cypress.config.ts` ainda não é suportado;
 - captura apenas chamadas feitas por `cy.request`;
 - não captura `axios` ou `fetch` diretamente;
-- o parse de assertions e os diagnósticos são heurísticos e determinísticos;
+- a leitura do plano de assertions e os diagnósticos são heurísticos e determinísticos;
 - a prévia shell pode exigir ajustes manuais;
 - não usa IA.
 

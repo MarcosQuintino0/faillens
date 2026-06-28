@@ -1,5 +1,6 @@
 import type { FailLensReport } from "../types/report";
 import { clientScript } from "./clientScript";
+import { embeddedFont } from "./embeddedFont";
 import { styles } from "./styles";
 
 function escapeHtml(value: string): string {
@@ -33,6 +34,7 @@ export function reportTemplate(report: FailLensReport): string {
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="generator" content="FailLens ${report.tool.version}">
   <title>${escapeHtml(project)} · FailLens</title>
+  <style>${embeddedFont}</style>
   <style>${styles}</style>
 </head>
 <body>

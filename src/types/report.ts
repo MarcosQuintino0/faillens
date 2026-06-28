@@ -9,6 +9,26 @@ export type TestState = "passed" | "failed" | "skipped" | "unknown";
 
 export type AssertionState = "passed" | "failed" | "pending" | "skipped" | "unknown";
 
+export type AssertionTarget = "status" | "body" | "header" | "schema" | "unknown";
+
+export interface FailLensStatusExpectation {
+  type: "exact" | "set" | "range" | "family" | "unknown";
+  label: string;
+  expected?: number;
+  values?: number[];
+  min?: number;
+  max?: number;
+  actual?: number;
+  matched?: boolean;
+}
+
+export interface FailLensPayloadDiffMarker {
+  path: string;
+  kind: "property" | "object" | "array" | "value" | "whole-response";
+  reason: string;
+  evidenceOnly?: boolean;
+}
+
 export interface FailLensError {
   name: string;
   message: string;
@@ -28,6 +48,7 @@ export interface FailLensDiagnosis {
     | "authorization-not-enforced"
     | "authentication-not-enforced"
     | "resource-not-found-mismatch"
+    | "duplicate-conflict"
     | "success-expected-but-client-error"
     | "success-expected-but-server-error"
     | "persistence-mismatch"
@@ -53,6 +74,12 @@ export interface FailLensAssertion {
   file?: string;
   line?: number;
   column?: number;
+  target?: AssertionTarget;
+}
+
+export interface FailLensRedirect {
+  statusCode?: number;
+  location: string;
 }
 
 export interface FailLensRequest {
@@ -72,6 +99,7 @@ export interface FailLensRequest {
   durationMs: number;
   curl: string;
   error?: FailLensError;
+  redirects?: FailLensRedirect[];
   generatedVariables?: string[];
   usedVariables?: string[];
 }
@@ -88,6 +116,8 @@ export interface FailLensTest {
   requests: FailLensRequest[];
   mainRequestId?: string;
   reproductionScript?: string;
+  statusExpectation?: FailLensStatusExpectation;
+  payloadDiff?: FailLensPayloadDiffMarker[];
 }
 
 export interface FailLensSpec {

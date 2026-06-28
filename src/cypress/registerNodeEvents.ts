@@ -7,6 +7,7 @@ import { generateJson } from "../reporter/generateJson";
 import type { ResolvedFailLensConfig } from "../types/config";
 import type { FailLensReport, FailLensSpec } from "../types/report";
 import { ensureDir, pathExists, readJsonFile, writeJsonFile } from "../utils/fs";
+import { extractSourceAssertions } from "../collector/extractSourceAssertions";
 
 export interface RegisterNodeEventsOptions {
   projectRoot: string;
@@ -65,7 +66,15 @@ export function registerNodeEvents(
 
   on("after:spec", async (spec: Record<string, unknown>, results?: Record<string, unknown>) => {
     const partial = store.mergeAfterSpec(spec, results);
-    await writeJsonFile(path.join(options.resultsDir, resultFileName(partial.specPath)), partial);
+    const specFile = String(spec.absolute || path.resolve(options.projectRoot, partial.specPath));
+    try {
+      const source = await fs.readFile(specFile, "utf8");
+      store.mergeSourceAssertions(partial.specPath, extractSourceAssertions(source, specFile));
+    } catch {
+      // O relatório continua válido quando o spec não está disponível para leitura estática.
+    }
+    const enriched = store.snapshotSpec(partial.specPath);
+    await writeJsonFile(path.join(options.resultsDir, resultFileName(enriched.specPath)), enriched);
   });
 
   on("after:run", async () => {

@@ -84,7 +84,7 @@ export function diagnoseFailure(context: DiagnosisContext): FailLensDiagnosis | 
     };
   }
 
-  if (/schema|contract|propriedade|property|campo.*esperad|missing.*field|type mismatch/.test(message)) {
+  if (/schema|contract|propriedade|property|campo.*esperad|missing.*field|type mismatch|deep(?:ly)?\s+equal|nested\s+property|response\.body/.test(message)) {
     return {
       category: "schema-contract-mismatch",
       confidence: main ? "medium" : "low",

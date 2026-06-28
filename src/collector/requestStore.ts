@@ -1,8 +1,16 @@
-import type { FailLensSpec, FailLensTest, FailLensRequest, TestState } from "../types/report";
+import type {
+  AssertionState,
+  FailLensAssertion,
+  FailLensSpec,
+  FailLensTest,
+  FailLensRequest,
+  TestState,
+} from "../types/report";
 import { generateCurl } from "./curlGenerator";
 import { maskSensitiveData, maskSensitiveText, maskUrl } from "./sensitiveMask";
 import { parseAssertionError } from "../reporter/diagnostics/parseAssertionError";
 import { asRecord, clampNumber, createId } from "../utils/format";
+import type { PlannedTestAssertions } from "./extractSourceAssertions";
 
 export interface SetTestPayload {
   id?: string;
@@ -33,6 +41,7 @@ export interface FinishRequestPayload {
   responseBody?: unknown;
   durationMs?: number;
   error?: unknown;
+  redirects?: Array<{ statusCode?: number; location: string }>;
 }
 
 export interface TestResultPayload {
@@ -41,6 +50,7 @@ export interface TestResultPayload {
   state?: TestState | string;
   durationMs?: number;
   error?: unknown;
+  assertions?: FailLensAssertion[];
 }
 
 interface MutableSpec extends FailLensSpec {
@@ -52,9 +62,31 @@ function normalizeState(value: unknown): TestState {
   return value === "passed" || value === "failed" ? value : "unknown";
 }
 
+function normalizeAssertionState(value: unknown): AssertionState {
+  if (["passed", "failed", "pending", "skipped"].includes(String(value))) {
+    return value as AssertionState;
+  }
+  return "unknown";
+}
+
 function sameTitle(test: FailLensTest, title: unknown): boolean {
   const value = Array.isArray(title) ? title.map(String).join(" > ") : String(title ?? "");
   return test.title === value || test.titlePath?.join(" > ") === value;
+}
+
+function comparableAssertionTitle(value: unknown): string {
+  return String(value || "")
+    .replace(/\*\*/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function assertionMatches(planned: FailLensAssertion, observed: FailLensAssertion): boolean {
+  if (planned.line && observed.line && planned.line === observed.line) return true;
+  const expected = comparableAssertionTitle(planned.title);
+  const actual = comparableAssertionTitle(observed.title);
+  return Boolean(expected && actual && (actual.includes(expected) || expected.includes(actual)));
 }
 
 export class RequestStore {
@@ -141,6 +173,12 @@ export class RequestStore {
       typeof payload.receivedStatus === "number" ? payload.receivedStatus : request.receivedStatus;
     request.responseHeaders = maskSensitiveData(asRecord(payload.responseHeaders), this.maskFields);
     request.responseBody = maskSensitiveData(payload.responseBody ?? null, this.maskFields);
+    request.redirects = Array.isArray(payload.redirects)
+      ? payload.redirects.map((redirect) => ({
+          statusCode: typeof redirect.statusCode === "number" ? redirect.statusCode : undefined,
+          location: maskUrl(String(redirect.location || ""), this.maskFields),
+        })).filter((redirect) => redirect.location)
+      : undefined;
     request.durationMs = Math.max(0, clampNumber(payload.durationMs));
     if (payload.error) request.error = parseAssertionError(payload.error, this.maskFields);
     request.curl = generateCurl(
@@ -161,7 +199,89 @@ export class RequestStore {
     test.state = normalizeState(payload.state);
     test.durationMs = Math.max(0, clampNumber(payload.durationMs));
     if (payload.error) test.error = parseAssertionError(payload.error, this.maskFields);
+    if (Array.isArray(payload.assertions)) {
+      test.assertions = payload.assertions.map((assertion, index) => ({
+        id: String(assertion.id || `assertion-${index + 1}`),
+        title: maskSensitiveText(String(assertion.title || "Assertion observada"), this.maskFields),
+        state: normalizeAssertionState(assertion.state),
+        message: assertion.message
+          ? maskSensitiveText(String(assertion.message), this.maskFields)
+          : undefined,
+        expected: maskSensitiveData(assertion.expected, this.maskFields),
+        actual: maskSensitiveData(assertion.actual, this.maskFields),
+        file: assertion.file ? String(assertion.file) : undefined,
+        line: typeof assertion.line === "number" ? assertion.line : undefined,
+        column: typeof assertion.column === "number" ? assertion.column : undefined,
+        target: assertion.target,
+      }));
+    }
     return null;
+  }
+
+  mergeSourceAssertions(specPath: string, plannedTests: PlannedTestAssertions[]): void {
+    const spec = this.getSpec(specPath);
+    for (const plannedTest of plannedTests) {
+      const test = spec.tests.find((item) => sameTitle(item, plannedTest.title));
+      if (!test || !plannedTest.assertions.length) continue;
+      if (plannedTest.statusExpectation) test.statusExpectation = { ...plannedTest.statusExpectation };
+      const observed = test.assertions || [];
+      const used = new Set<string>();
+      const assertions = plannedTest.assertions.map((planned) => {
+        const match = observed.find((item) => !used.has(item.id) && assertionMatches(planned, item));
+        if (match) used.add(match.id);
+        return match
+          ? {
+              ...planned,
+              ...match,
+              id: planned.id,
+              title: planned.title,
+              file: planned.file,
+              line: planned.line,
+              column: planned.column,
+              target: planned.target,
+            }
+          : { ...planned };
+      });
+      let failureIndex = assertions.findIndex((item) => item.state === "failed");
+      if (failureIndex < 0 && test.error?.line) {
+        failureIndex = assertions.findIndex((item) => item.line === test.error?.line);
+      }
+      if (failureIndex < 0 && test.error?.assertionMessage) {
+        const message = comparableAssertionTitle(test.error.assertionMessage);
+        failureIndex = assertions.findIndex((item) => message.includes(comparableAssertionTitle(item.title)));
+      }
+      if (test.state === "failed" && failureIndex >= 0) {
+        assertions[failureIndex] = {
+          ...assertions[failureIndex],
+          state: "failed",
+          message: assertions[failureIndex].message || test.error?.message,
+          expected: assertions[failureIndex].expected ?? test.error?.expected,
+          actual: assertions[failureIndex].actual ?? test.error?.actual,
+        };
+        const failedRequestOrder = plannedTest.assertions[failureIndex]?.sourceRequestOrder;
+        for (let index = failureIndex + 1; index < assertions.length; index += 1) {
+          if (assertions[index].state !== "unknown") continue;
+          const requestOrder = plannedTest.assertions[index]?.sourceRequestOrder;
+          assertions[index].state =
+            failedRequestOrder !== undefined && requestOrder !== undefined && requestOrder > failedRequestOrder
+              ? "skipped"
+              : "pending";
+        }
+      }
+      if (test.state === "passed") {
+        for (const assertion of assertions) {
+          if (assertion.state === "unknown") assertion.state = "skipped";
+        }
+      }
+      test.assertions = assertions.map((assertion) => {
+        const {
+          sourceRequestOrder: _sourceRequestOrder,
+          sourceStatusExpectation: _sourceStatusExpectation,
+          ...publicAssertion
+        } = assertion;
+        return publicAssertion;
+      });
+    }
   }
 
   mergeAfterSpec(specInfo: Record<string, unknown>, results?: Record<string, unknown>): FailLensSpec {

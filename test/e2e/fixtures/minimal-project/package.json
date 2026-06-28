@@ -1,0 +1,7 @@
+{
+  "name": "faillens-e2e-fixture",
+  "private": true,
+  "devDependencies": {
+    "cypress": "*"
+  }
+}

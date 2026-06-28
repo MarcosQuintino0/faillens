@@ -11,6 +11,22 @@ interface PendingRequest {
   startedAt: number;
 }
 
+export function normalizeRedirects(value: unknown): Array<{ statusCode?: number; location: string }> {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (typeof item === "string") {
+      const match = item.match(/^\s*(\d{3})\s*:\s*(.+?)\s*$/);
+      return [{ statusCode: match ? Number(match[1]) : undefined, location: match ? match[2] : item }];
+    }
+    if (!item || typeof item !== "object") return [];
+    const redirect = item as Record<string, any>;
+    const location = redirect.location || redirect.redirectedToUrl || redirect.headers?.location;
+    if (!location) return [];
+    const status = redirect.statusCode ?? redirect.status;
+    return [{ statusCode: typeof status === "number" ? status : undefined, location: String(location) }];
+  });
+}
+
 function requestId(): string {
   return `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -39,6 +55,7 @@ function finishPayload(item: PendingRequest, response: any, error?: any): Record
           : undefined,
     responseHeaders: received?.headers || {},
     responseBody: received?.body ?? null,
+    redirects: normalizeRedirects(received?.redirects),
     durationMs:
       typeof received?.duration === "number" ? received.duration : Math.max(0, Date.now() - item.startedAt),
     error: error ? serializeError(error) : undefined,

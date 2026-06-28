@@ -20,7 +20,11 @@
     "clean": "rimraf dist",
     "pretest": "npm run build",
     "prepublishOnly": "npm run clean && npm run build",
-    "test": "node --test"
+    "test": "node --test test/*.test.js \"test/unit/*.test.js\" \"test/integration/*.test.js\" \"test/e2e/*.test.js\"",
+    "test:unit": "node --test \"test/unit/*.test.js\"",
+    "test:integration": "node --test \"test/integration/*.test.js\"",
+    "test:e2e": "node --test \"test/e2e/*.test.js\"",
+    "bench": "node test/benchmarks/generation.bench.js && node test/benchmarks/masking.bench.js"
   },
   "engines": {
     "node": ">=18"

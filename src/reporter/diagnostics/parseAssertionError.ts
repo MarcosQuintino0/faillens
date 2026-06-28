@@ -63,8 +63,18 @@ export function parseAssertionError(
     return result;
   }
 
+  const forbiddenProperty = message.match(
+    /to\s+not\s+have(?:\s+(?:own|nested))?\s+property\s+['"`]([^'"`]+)['"`]/i,
+  );
+  if (forbiddenProperty) {
+    const property = forbiddenProperty[1];
+    result.expected ??= `ausência de ${property}`;
+    result.actual ??= `${property} presente`;
+    return result;
+  }
+
   const equality = message.match(
-    /expected\s+(.+?)\s+to\s+(?:deep\s+)?(?:equal|eq)\s+([^\n,;]+?)(?:\s+but\s+got\s+.+)?$/im,
+    /expected\s+(.+?)\s+to\s+(?:deep(?:ly)?\s+)?(?:equal|eq)\s+([^\n,;]+?)(?:\s+but\s+got\s+.+)?$/im,
   );
   if (equality) {
     result.actual = parseLiteral(equality[1]);

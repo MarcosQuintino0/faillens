@@ -39,9 +39,9 @@ export function isSensitiveField(key: string, extraFields: string[] = []): boole
 export function maskSensitiveData<T>(value: T, extraFields: string[] = []): T {
   const fields = sensitiveSet(extraFields);
   const visited = new WeakMap<object, unknown>();
+  const textHints = extraFields.map((field) => field.toLowerCase());
 
-  function walk(current: unknown, parentKey = ""): unknown {
-    if (fields.has(canonicalKey(parentKey))) return maskedValue(parentKey, current);
+  function walk(current: unknown): unknown {
     if (current === null || current === undefined) return current;
     if (typeof current === "string") {
       const trimmed = current.trim();
@@ -53,6 +53,10 @@ export function maskSensitiveData<T>(value: T, extraFields: string[] = []): T {
         }
       }
       if (/^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$/.test(trimmed)) return "<TOKEN>";
+      if (
+        !/bearer|authorization|cookie|password|senha|token|api.?key|secret|jwt|cpf|cnpj|[?&]/i.test(current) &&
+        !textHints.some((field) => current.toLowerCase().includes(field))
+      ) return current;
       return maskSensitiveText(current, extraFields);
     }
     if (Array.isArray(current)) {
@@ -67,7 +71,7 @@ export function maskSensitiveData<T>(value: T, extraFields: string[] = []): T {
       const result: Record<string, unknown> = {};
       visited.set(current as object, result);
       for (const [key, item] of Object.entries(current as Record<string, unknown>)) {
-        result[key] = fields.has(canonicalKey(key)) ? maskedValue(key, item) : walk(item, key);
+        result[key] = fields.has(canonicalKey(key)) ? maskedValue(key, item) : walk(item);
       }
       return result;
     }
@@ -100,10 +104,15 @@ export function maskSensitiveText(value: string, extraFields: string[] = []): st
     .replace(/(authorization\s*[:=]\s*)[^\s,;]+/gi, "$1***")
     .replace(/((?:set-)?cookie\s*[:=]\s*)[^\r\n]+/gi, "$1***");
 
+  masked = masked.replace(
+    /((?:token|access\s*token|refresh\s*token|password|senha|api\s*key|secret|jwt)[^:\r\n]{0,48}:\s*expected\s+)(?:\*\*)?[^*\s][^*\r\n]*?(?:\*\*)?(\s+to\b)/gi,
+    "$1***$2",
+  );
+
   for (const field of [...DEFAULT_MASK_FIELDS, ...extraFields]) {
     const escaped = field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     masked = masked.replace(
-      new RegExp(`([?&]${escaped}=|["']?${escaped}["']?\\s*[:=]\\s*["']?)[^&\\s,;"'}]+`, "gi"),
+      new RegExp(`([?&]${escaped}=|["']?${escaped}["']?\\s*[:=]\\s*["']?)(?!expected\\b)[^&\\s,;"'}]+`, "gi"),
       "$1***",
     );
   }
