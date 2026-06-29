@@ -33,6 +33,7 @@ test("run instrumenta consumidor, gera os dois relatórios e preserva exit code"
       setupNodeEvents(on, config) {
         on("task", { consumerTask() { return "preserved"; } });
         on("after:spec", () => { globalThis.consumerAfterSpec = true; });
+        on("after:screenshot", async () => { globalThis.consumerAfterScreenshot = true; return { size: 999 }; });
         return config;
       }
     }
@@ -70,9 +71,19 @@ test("run instrumenta consumidor, gera os dois relatórios e preserva exit code"
           { id: "a-1", title: "Status deve ser 400", state: "failed", expected: 400, actual: 201 },
         ],
       });
-      await handlers["after:spec"]({ relative: specPath, name: "api.cy.js" }, { stats: { duration: 80 }, tests: [{ title: ["Suite", "falha"], state: "failed", attempts: [{ wallClockDuration: 80 }] }] });
+      const screenshotResult = await handlers["after:screenshot"]({
+        path: path.join(process.cwd(), "cypress", "screenshots", "api.cy.js", "Suite -- falha (failed).png"),
+        specName: specPath,
+        size: 321,
+        dimensions: { width: 1280, height: 720 },
+        takenAt: "2026-06-28T10:00:00.000Z",
+      });
+      if (!globalThis.consumerAfterScreenshot || screenshotResult.size !== 999) throw new Error("after:screenshot do consumidor não preservado");
+      await handlers["after:spec"]({ relative: specPath, name: "api.cy.js" }, { stats: { duration: 80 }, tests: [{ title: ["Suite", "falha"], state: "failed", attempts: [{ state: "failed", wallClockStartedAt: "2026-06-28T09:59:59.000Z", wallClockDuration: 2000 }] }] });
       if (!globalThis.consumerAfterSpec) throw new Error("after:spec do consumidor não preservado");
       await handlers["after:run"]({});
+      const output = path.join(process.cwd(), "reports", "faillens");
+      if (require("node:fs").existsSync(path.join(output, "index.html"))) throw new Error("geração duplicada em after:run");
       process.exitCode = 7;
     })().catch((error) => { console.error(error); process.exitCode = 99; });
   `);
@@ -93,6 +104,18 @@ test("run instrumenta consumidor, gera os dois relatórios e preserva exit code"
   assert.deepEqual(report.specs[0].tests[0].requests[0].redirects, [
     { statusCode: 302, location: "http://localhost:3333/next?token=***" },
   ]);
+  assert.deepEqual(report.specs[0].tests[0].evidence.screenshots[0], {
+    relativePath: "cypress/screenshots/api.cy.js/Suite -- falha (failed).png",
+    href: "../../cypress/screenshots/api.cy.js/Suite%20--%20falha%20(failed).png",
+    fileName: "Suite -- falha (failed).png",
+    size: 321,
+    width: 1280,
+    height: 720,
+    takenAt: "2026-06-28T10:00:00.000Z",
+    attempt: 1,
+    kind: "failure",
+  });
+  assert.doesNotMatch(JSON.stringify(report.specs[0].tests[0].evidence), /faillens-consumer-|[A-Z]:\\/i);
   assert.doesNotMatch(JSON.stringify(report), /Bearer real|password":"real/);
   assert.match(html, /FailLens/);
 });

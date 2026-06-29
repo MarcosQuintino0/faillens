@@ -104,6 +104,22 @@ export interface FailLensRequest {
   usedVariables?: string[];
 }
 
+export interface FailLensScreenshot {
+  relativePath: string;
+  href: string;
+  fileName: string;
+  size: number;
+  width?: number;
+  height?: number;
+  takenAt?: string;
+  attempt?: number;
+  kind: "failure" | "manual";
+}
+
+export interface FailLensEvidence {
+  screenshots?: FailLensScreenshot[];
+}
+
 export interface FailLensTest {
   id: string;
   title: string;
@@ -118,6 +134,7 @@ export interface FailLensTest {
   reproductionScript?: string;
   statusExpectation?: FailLensStatusExpectation;
   payloadDiff?: FailLensPayloadDiffMarker[];
+  evidence?: FailLensEvidence;
 }
 
 export interface FailLensSpec {

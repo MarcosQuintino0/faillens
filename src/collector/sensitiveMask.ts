@@ -71,7 +71,12 @@ export function maskSensitiveData<T>(value: T, extraFields: string[] = []): T {
       const result: Record<string, unknown> = {};
       visited.set(current as object, result);
       for (const [key, item] of Object.entries(current as Record<string, unknown>)) {
-        result[key] = fields.has(canonicalKey(key)) ? maskedValue(key, item) : walk(item);
+        Object.defineProperty(result, key, {
+          value: fields.has(canonicalKey(key)) ? maskedValue(key, item) : walk(item),
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
       }
       return result;
     }

@@ -102,3 +102,17 @@ test("tool.packageName é faillens", async () => {
   assert.equal(parsed.tool.packageName, "faillens");
   assert.ok(parsed.tool.version);
 });
+
+test("JSON persiste metadata de screenshot sem caminho absoluto, bytes ou base64", async () => {
+  const spec = makeSpec();
+  spec.tests[0].evidence = { screenshots: [{
+    relativePath: "cypress/screenshots/users.cy.js/falha (failed).png",
+    href: "../../cypress/screenshots/users.cy.js/falha%20(failed).png",
+    fileName: "falha (failed).png",
+    size: 2048,
+    kind: "failure",
+  }] };
+  const { content, parsed } = await buildAndGenerateJson([spec]);
+  assert.equal(parsed.specs[0].tests[0].evidence.screenshots[0].size, 2048);
+  assert.doesNotMatch(content, /data:image\/png;base64|iVBORw0KGgo|[A-Z]:\\|\/home\//i);
+});

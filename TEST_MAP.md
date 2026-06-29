@@ -106,24 +106,25 @@
 | Edge cases de modelo | `test/integration/build-report.test.js` |
 
 **inferMainRequest — casos críticos:**
-- Auth requests (URL com `/login` ou `/auth/login`) são excluídos dos candidatos
-- Score: método esperado pelo título (+30), status recebido === actual do erro (+45), mutação (+3)
 - Sem requests → `undefined`
-- Só auth requests → usa auth como fallback
+- Status recebido igual ao `actual` do erro é o sinal de maior prioridade
+- Mutações (`POST`, `PUT`, `PATCH`, `DELETE`) vencem métodos sem mutação quando não há sinal de status
+- Empate preserva a chamada mais antiga
+- Login/auth não recebe tratamento especial; endpoint e idioma não influenciam
 - Múltiplos POSTs → escolhe o que tem status matching o erro
 
 **annotateRequests — fases:**
-- URL com `/login` → `"preparacao"` independente da posição
 - `mainRequestId` → `"validacao"`
+- Requests anteriores à principal → `"preparacao"`
 - Após main, método GET → `"verificacao"`
 - Após main, método DELETE → `"limpeza"`
 - Demais → `"chamada"`
 
 **buildReproductionScript — variáveis:**
-- Response body com `{ token }` ou `{ accessToken }` → extrai `$TOKEN`
-- Response body com `{ id }` em endpoint `/usuarios` → `$USER_ID`
-- Response body com `{ id }` em endpoint `/pedidos` → `$ORDER_ID`
-- Response body com `{ id }` em outros endpoints → `$RESOURCE_ID`
+- Valor escalar de uma resposta só vira variável quando reaparece em request posterior
+- Nome da variável é derivado da chave real do campo, sem vocabulário de domínio
+- Response body com chave de token + uso Bearer posterior → extrai `$TOKEN`
+- O script preserva o fluxo completo de requests
 - Variável usada em request posterior → substituída no cURL
 - `$TOKEN` usado em `Authorization: Bearer` → substituído automaticamente
 
@@ -131,7 +132,7 @@
 
 ## src/reporter/diagnostics/diagnoseFailure.ts
 
-**Responsabilidade:** motor de diagnóstico determinístico (13 categorias)
+**Responsabilidade:** motor de diagnóstico determinístico (14 categorias)
 
 | Testes | Arquivo |
 |--------|---------|
@@ -150,6 +151,7 @@ unhandled-validation-error       → expected 400, received 500
 authorization-not-enforced       → expected 403, received 200
 authentication-not-enforced      → expected 401, received 200
 resource-not-found-mismatch      → expected 404, received 200
+duplicate-conflict               → expected 409, criação recebeu 2xx
 success-expected-but-client-error → expected 200, received 400
 success-expected-but-server-error → expected 200, received 500
 unknown                          → sem padrão reconhecido
@@ -240,7 +242,19 @@ unknown                          → sem padrão reconhecido
 | Testes | Arquivo |
 |--------|---------|
 | Integração CLI completa | `test/cli-run.test.js` (já existe — não duplicar) |
-| E2E com CLI real | `test/e2e/cli-run.test.js` |
+
+`test/e2e/fixtures/minimal-project/` contém a fixture Cypress mínima. Ainda não há um arquivo de teste E2E dedicado; não cite um até ele existir.
+
+## src/cli/open.ts + src/server/localReportServer.ts
+
+**Responsabilidade:** localizar e servir o relatório em loopback com lifecycle automático.
+
+| Contrato | Arquivo |
+|---|---|
+| Diretório padrão e artefatos obrigatórios | `test/integration/open-command.test.js` |
+| Bind em loopback, token, Host, allowlist de PNG, JSON e MIME | `test/integration/local-report-server.test.js` |
+| SSE e encerramento após a última aba | `test/integration/local-report-server.test.js` |
+| Transporte do PNG e lifecycle no cliente | `test/integration/generate-html.test.js` |
 
 ---
 
@@ -261,7 +275,8 @@ unknown                          → sem padrão reconhecido
 | Testes | Arquivo |
 |--------|---------|
 | Integração via cli-run | `test/cli-run.test.js` |
-| Se modificar diretamente | `test/integration/instrumented-config.test.js` (criar se necessário) |
+
+Se a instrumentação ganhar um contrato que `test/cli-run.test.js` não consiga provar, crie então um teste de integração dedicado e atualize este mapa com o caminho real.
 
 ---
 
@@ -317,10 +332,38 @@ unknown                          → sem padrão reconhecido
 
 | Arquivo | O que mede |
 |---------|-----------|
-| `test/benchmarks/generation.bench.js` | buildReportModel + generateHtml com fixture grande |
+| `test/benchmarks/generation.bench.js` | RequestStore, modelo, serialização, escrita paralela, pipeline, escalas, screenshots, RSS/heap e artefatos |
 | `test/benchmarks/masking.bench.js` | maskSensitiveData em objetos de vários tamanhos |
 
+## src/cypress/screenshotEvidence.ts
+
+| Contrato | Arquivo |
+|---|---|
+| Paths Windows/POSIX, encoding, folder customizado, traversal, spec+título, retries, manual/automático e ausência | `test/unit/screenshot-evidence.test.js` |
+| Handler preservado, partial sanitizado, geração única e exit code | `test/cli-run.test.js` |
+| Uso público direto continua gerando em `after:run` | `test/integration/register-node-events.test.js` |
+
+## src/reporter/evidence.ts + src/templates/evidenceClipboard.ts
+
+| Contrato | Arquivo |
+|---|---|
+| Texto/HTML determinísticos, escaping e clipboard rico/fallback | `test/unit/evidence.test.js` |
+| Terceira aba, ARIA, link, estado vazio, CSP e ausência de bytes | `test/integration/generate-html.test.js` |
+| Rejeição de schemes/traversal/path absoluto | `test/integration/security.test.js` |
+
 Leia `PERFORMANCE_BUDGET.md` antes de modificar collector/ ou reporter/.
+
+---
+
+## Segurança transversal
+
+| Contrato | Arquivo |
+|---|---|
+| Injeção de shell em cURL e reprodução | `test/integration/security.test.js` |
+| Chaves especiais e proteção contra prototype pollution | `test/integration/security.test.js` |
+| Tema não confiável, CSP e mapas do cliente | `test/integration/security.test.js` |
+
+Ao adicionar uma nova superfície de persistência, shell ou HTML, inclua uma regressão nesse arquivo além do teste funcional do módulo.
 
 ---
 

@@ -118,6 +118,29 @@ node test/benchmarks/generation.bench.js  # só geração
 node test/benchmarks/masking.bench.js     # só mascaramento
 ```
 
+## Pipeline e matrizes ampliadas
+
+`generation.bench.js` faz warm-up e usa mediana de 5 execuções até 1.000 testes. Fixtures de 2.000 e 2.500 testes usam 2 execuções para limitar custo de CI. Todo diretório temporário é removido em `finally`.
+
+| Medição | Limite |
+|---|---:|
+| Captura/RequestStore — 100 testes, 500 requests | 300 ms |
+| `buildReportModel` — referência 100/500, body 2 KB | 400 ms |
+| Serialização HTML | 200 ms |
+| Serialização JSON | 150 ms |
+| Escrita HTML + JSON em paralelo | 300 ms |
+| Pipeline real de referência | 500 ms |
+| Pipeline até 2.500 testes/12.500 requests | 8 s |
+| RSS isolado até 2.500 testes | 1.200 MB |
+
+Contratos relacionais:
+
+- 2.500 testes custam no máximo 3 vezes o cenário de 1.000;
+- 200 requests em um teste custam no máximo 3 vezes o cenário de 100;
+- metadata em 80% dos testes falhos acrescenta no máximo 10% de tempo (com tolerância mínima de 10 ms para ruído) e 1 KB por teste falho;
+- heap e tamanho dos artefatos de 2.500 testes ficam em até 3 vezes o cenário de 1.000;
+- fixtures de screenshot contêm somente metadata/path fictício e rejeitam assinaturas PNG/base64.
+
 Output esperado (quando dentro do budget):
 ```
 [BENCH] buildReportModel (100t/500r): 187ms  ✓ (limite 400ms)

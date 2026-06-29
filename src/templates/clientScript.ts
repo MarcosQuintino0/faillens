@@ -1,16 +1,29 @@
+import { buildEvidenceHtml, buildEvidenceText } from "../reporter/evidence";
+import { copyEvidenceToClipboard } from "./evidenceClipboard";
+
+const buildEvidenceTextSource = buildEvidenceText.toString();
+const buildEvidenceHtmlSource = buildEvidenceHtml.toString();
+const copyEvidenceSource = copyEvidenceToClipboard.toString();
+
 export const clientScript = String.raw`
 (function () {
   "use strict";
+  var buildEvidenceText = ${buildEvidenceTextSource};
+  var buildEvidenceHtml = ${buildEvidenceHtmlSource};
+  var copyEvidenceToClipboard = ${copyEvidenceSource};
   var report = JSON.parse(document.getElementById("faillens-data").textContent);
+  var localToken = /^https?:$/.test(location.protocol) ? new URLSearchParams(location.search).get("token") : null;
   var all = [];
   report.specs.forEach(function (spec) {
     spec.tests.forEach(function (test) { all.push({ spec: spec, test: test }); });
   });
   var state = { mode: "all", query: "", selected: null, requestId: null, view: "call",
-    collapsedSpecs: {}, passedShown: {}, seqShown: {}, assertShown: {} };
+    collapsedSpecs: Object.create(null), passedShown: Object.create(null),
+    seqShown: Object.create(null), assertShown: Object.create(null) };
   var sidebar = document.getElementById("test-list");
   var detail = document.getElementById("detail");
   var toast = document.getElementById("toast");
+  var evidenceImage = { key: null, image: null, canvas: null, blob: null, dataUrl: null, blocked: false };
 
   var COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h10"></path></svg>';
 
@@ -50,8 +63,8 @@ export const clientScript = String.raw`
     var parts = String(value || "spec desconhecida").replace(/\\/g, "/").split("/");
     return parts[parts.length - 1];
   }
-  function copyFeedback(button, success) {
-    flash(success ? "Copiado para a área de transferência" : "Não foi possível copiar");
+  function copyFeedback(button, success, message) {
+    flash(message || (success ? "Copiado para a área de transferência" : "Não foi possível copiar"));
     if (!button || !success) return;
     var original = button.innerHTML;
     button.classList.add("copied");
@@ -68,7 +81,7 @@ export const clientScript = String.raw`
     clearTimeout(flash.timer);
     flash.timer = setTimeout(function () { toast.classList.remove("show"); }, 1800);
   }
-  function fallbackCopy(text, button) {
+  function fallbackCopyValue(text) {
     var area = document.createElement("textarea");
     area.value = text;
     area.style.position = "fixed";
@@ -78,7 +91,10 @@ export const clientScript = String.raw`
     var success = false;
     try { success = document.execCommand("copy"); } catch (_) {}
     area.remove();
-    copyFeedback(button, success);
+    return success;
+  }
+  function fallbackCopy(text, button) {
+    copyFeedback(button, fallbackCopyValue(text));
   }
   function copy(text, button) {
     if (navigator.clipboard && window.isSecureContext) {
@@ -93,16 +109,70 @@ export const clientScript = String.raw`
     });
   }
   function itemKey(item) { return item.spec.specPath + "::" + item.test.id; }
+  function evidenceUrl(screenshot) {
+    if (!localToken || !screenshot || !screenshot.relativePath) return screenshot && screenshot.href || "";
+    return "/__faillens/evidence?token=" + encodeURIComponent(localToken) + "&path=" + encodeURIComponent(screenshot.relativePath);
+  }
   function selectedItem() { return all.find(function (item) { return itemKey(item) === state.selected; }); }
+  function releaseEvidenceImage() {
+    if (evidenceImage.image) { evidenceImage.image.onload = null; evidenceImage.image.onerror = null; }
+    evidenceImage = { key: null, image: null, canvas: null, blob: null, dataUrl: null, blocked: false };
+  }
+  function prepareEvidenceImage(item) {
+    var key = itemKey(item);
+    var image = detail.querySelector("[data-evidence-preview]");
+    if (!image) { releaseEvidenceImage(); return; }
+    if (evidenceImage.key === key && evidenceImage.image === image) return;
+    releaseEvidenceImage();
+    evidenceImage.key = key;
+    evidenceImage.image = image;
+    var screenshot = item.test.evidence && item.test.evidence.screenshots && item.test.evidence.screenshots[0];
+    if (localToken && screenshot) {
+      fetch(evidenceUrl(screenshot), { credentials: "same-origin" }).then(function (response) {
+        if (!response.ok) throw new Error("screenshot indisponível");
+        return response.blob();
+      }).then(function (blob) {
+        if (evidenceImage.key !== key) return;
+        evidenceImage.blob = blob;
+        var reader = new FileReader();
+        reader.onload = function () { if (evidenceImage.key === key) evidenceImage.dataUrl = String(reader.result || ""); };
+        reader.readAsDataURL(blob);
+      }).catch(function () { if (evidenceImage.key === key) evidenceImage.blocked = true; });
+      return;
+    }
+    var prepare = function () {
+      if (evidenceImage.key !== key) return;
+      try {
+        var canvas = document.createElement("canvas");
+        canvas.width = image.naturalWidth;
+        canvas.height = image.naturalHeight;
+        var context = canvas.getContext("2d");
+        if (!context) throw new Error("canvas indisponível");
+        context.drawImage(image, 0, 0);
+        evidenceImage.canvas = canvas;
+        evidenceImage.dataUrl = canvas.toDataURL("image/png");
+        canvas.toBlob(function (blob) {
+          if (evidenceImage.key === key) {
+            evidenceImage.blob = blob;
+            if (!blob) evidenceImage.blocked = true;
+          }
+        }, "image/png");
+      } catch (_) { evidenceImage.blocked = true; evidenceImage.canvas = null; evidenceImage.dataUrl = null; }
+    };
+    image.onload = prepare;
+    image.onerror = function () { if (evidenceImage.key === key) evidenceImage.blocked = true; };
+    if (image.complete && image.naturalWidth) prepare();
+  }
 
   function renderSidebar() {
     var visible = visibleItems();
     if (!state.selected || !visible.some(function (item) { return itemKey(item) === state.selected; })) {
+      releaseEvidenceImage();
       state.selected = visible.length ? itemKey(visible[0]) : null;
       state.requestId = null;
       state.view = "call";
     }
-    var groups = {};
+    var groups = Object.create(null);
     visible.forEach(function (item) {
       (groups[item.spec.specPath] || (groups[item.spec.specPath] = [])).push(item);
     });
@@ -178,7 +248,7 @@ export const clientScript = String.raw`
     if (markers.some(function (marker) { return marker.kind === "whole-response"; })) {
       return { status: expectedStatus, body: "Resposta de erro; não uma coleção" };
     }
-    var absent = {};
+    var absent = Object.create(null);
     markers.forEach(function (marker) {
       if (!marker.evidenceOnly && marker.path.indexOf("$.") === 0) absent[marker.path.slice(2)] = "<ausente>";
     });
@@ -365,12 +435,14 @@ export const clientScript = String.raw`
   }
 
   function selectedPanel(test, selectedRequest, selectedContext) {
-    var hasScript = Boolean(test.reproductionScript);
-    var callView = !hasScript || state.view === "call";
+    var callView = state.view === "call";
+    var scriptView = state.view === "script";
     var flow = test.requests.map(function (request) { return request.method + ' ' + chainedUrl(request); }).join(' → ');
-    var tabs = '<div class="debug-tabs"><button class="debug-tab ' + (callView ? 'active' : '') + '" data-detail-tab="call">Chamada selecionada</button>' +
-      (hasScript ? '<button class="debug-tab ' + (!callView ? 'active' : '') + '" data-detail-tab="script">Script de reprodução</button>' : '') + '</div>';
-    var hint = callView ? selectedContext : 'fluxo completo · ' + flow;
+    var tabs = '<div class="debug-tabs" role="tablist" aria-label="Detalhes do teste">' +
+      '<button id="detail-tab-call" class="debug-tab ' + (callView ? 'active' : '') + '" data-detail-tab="call" role="tab" aria-selected="' + callView + '" aria-controls="detail-panel-call" tabindex="' + (callView ? '0' : '-1') + '">Chamada selecionada</button>' +
+      '<button id="detail-tab-script" class="debug-tab ' + (scriptView ? 'active' : '') + '" data-detail-tab="script" role="tab" aria-selected="' + scriptView + '" aria-controls="detail-panel-script" tabindex="' + (scriptView ? '0' : '-1') + '">Script de reprodução</button>' +
+      '<button id="detail-tab-evidence" class="debug-tab ' + (state.view === "evidence" ? 'active' : '') + '" data-detail-tab="evidence" role="tab" aria-selected="' + (state.view === "evidence") + '" aria-controls="detail-panel-evidence" tabindex="' + (state.view === "evidence" ? '0' : '-1') + '">Evidência para o dev</button></div>';
+    var hint = callView ? selectedContext : scriptView ? 'fluxo completo · ' + flow : 'pronto para compartilhar no chamado';
     var content;
     if (callView) {
       content = selectedRequest
@@ -378,14 +450,29 @@ export const clientScript = String.raw`
           codePanel("Response body", selectedRequest.receivedStatus == null ? "sem resposta" : selectedRequest.receivedStatus + " " + statusMeaning(selectedRequest.receivedStatus), json(selectedRequest.responseBody), "response", "response-panel") +
           codePanel("Request body", "payload enviado", json(selectedRequest.requestBody), "request", "full-span") + '</div>'
         : '<p class="empty-note">Selecione uma chamada.</p>';
-    } else {
+    } else if (scriptView) {
       content = '<p class="reproduction-help">Cole no terminal e execute de cima a baixo. A prévia encadeia as variáveis detectadas automaticamente e mantém os dados sensíveis mascarados.</p>' +
         '<div class="format-chips"><span class="format-chip active">bash + curl</span></div>' +
         '<div class="code-panel reproduction-code"><div class="code-head"><span class="code-title mono">reproduzir.sh</span><button class="copy-button mini" data-copy-kind="script" aria-label="Copiar script" title="Copiar script">' + COPY_ICON + '</button></div>' +
         '<pre>' + e(test.reproductionScript || "Nenhuma request disponível.") + '</pre></div>';
+    } else {
+      var main = test.requests.find(function (request) { return request.id === test.mainRequestId; }) || test.requests[0];
+      var expectation = test.statusExpectation || {};
+      var expected = expectation.label || (test.error && test.error.expected != null ? String(test.error.expected) : "Não especificado");
+      var actual = expectation.actual != null ? String(expectation.actual) : (main && main.receivedStatus != null ? String(main.receivedStatus) : "Sem resposta");
+      var screenshot = test.evidence && test.evidence.screenshots && test.evidence.screenshots[0];
+      var screenshotSource = evidenceUrl(screenshot);
+      var summary = test.diagnosis && test.diagnosis.summary || test.error && test.error.message || "Falha registrada sem resumo.";
+      var screenshotHtml = screenshot
+        ? '<div class="evidence-screenshot"><div class="evidence-screenshot-head"><div><strong>Screenshot do Cypress</strong><span>' + e(screenshot.fileName) + '</span></div><a class="evidence-link" href="' + e(screenshotSource) + '" target="_blank" rel="noopener noreferrer">Abrir screenshot</a></div>' +
+          '<div class="evidence-preview-wrap"><img class="evidence-preview" data-evidence-preview src="' + e(screenshotSource) + '" alt="Screenshot do Cypress: ' + e(screenshot.fileName) + '" loading="lazy" decoding="async" draggable="true"><p>Clique com o botão direito na imagem para copiá-la ou arraste-a para o Jira quando a cópia automática for bloqueada.</p></div></div>'
+        : '<div class="evidence-empty"><div><strong>O Cypress não gerou screenshot para este teste.</strong><span>A evidência textual e o cURL ainda podem ser copiados.</span></div><span class="evidence-link disabled" aria-disabled="true">Abrir screenshot</span></div>';
+      content = '<div class="evidence-panel"><div class="evidence-heading"><div><h3>Evidência para o desenvolvedor</h3><p>Resumo sanitizado para compartilhar em um chamado.</p></div><button class="copy-button primary" data-copy-kind="evidence">Copiar evidência</button></div>' +
+        '<div class="evidence-summary"><span>Falha</span><strong>' + e(summary) + '</strong><div><span>Esperado: <b>' + e(expected) + '</b></span><span>Recebido: <b>' + e(actual) + '</b></span></div></div>' +
+        '<div class="code-panel evidence-curl"><div class="code-head"><span class="code-title">cURL para reprodução</span><button class="copy-button mini" data-copy-kind="evidence-curl" aria-label="Copiar cURL">' + COPY_ICON + ' Copiar cURL</button></div><pre>' + e(main && main.curl || "Nenhuma request disponível.") + '</pre></div>' + screenshotHtml + '</div>';
     }
     return '<section class="panel debug-panel"><div class="debug-toolbar">' + tabs + '<span class="debug-context">' + e(hint) + '</span></div>' +
-      '<div class="panel-body">' + content + '</div></section>';
+      '<div id="detail-panel-' + e(state.view) + '" class="panel-body" role="tabpanel" aria-labelledby="detail-tab-' + e(state.view) + '">' + content + '</div></section>';
   }
 
   function renderDetail() {
@@ -417,6 +504,7 @@ export const clientScript = String.raw`
       '<div class="panel-body sequence-scroll"><div class="sequence">' + requestRows(test) + '</div></div></section>' +
       selectedPanel(test, selectedRequest, selectedContext);
     positionBarTimes();
+    if (state.view === "evidence") prepareEvidenceImage(item);
   }
 
   function openModal(title, codeElement) {
@@ -467,6 +555,7 @@ export const clientScript = String.raw`
     }
     var button = event.target.closest("[data-test]");
     if (!button) return;
+    releaseEvidenceImage();
     state.selected = button.dataset.test;
     state.requestId = null;
     state.view = "call";
@@ -514,6 +603,52 @@ export const clientScript = String.raw`
     else if (kind === "curl") copy(selectedRequest ? selectedRequest.curl : "", copyButton);
     else if (kind === "response") copy(selectedRequest ? json(selectedRequest.responseBody) : "", copyButton);
     else if (kind === "request") copy(selectedRequest ? json(selectedRequest.requestBody) : "", copyButton);
+    else if (kind === "evidence-curl") {
+      var evidenceMain = current.test.requests.find(function (request) { return request.id === current.test.mainRequestId; }) || current.test.requests[0];
+      copy(evidenceMain ? evidenceMain.curl : "", copyButton);
+    } else if (kind === "evidence") {
+      var mainRequest = current.test.requests.find(function (request) { return request.id === current.test.mainRequestId; }) || current.test.requests[0];
+      var status = current.test.statusExpectation || {};
+      var screenshot = current.test.evidence && current.test.evidence.screenshots && current.test.evidence.screenshots[0];
+      var input = {
+        title: current.test.title,
+        specPath: current.spec.specPath,
+        failure: current.test.diagnosis && current.test.diagnosis.summary || current.test.error && current.test.error.message || "Falha registrada sem resumo.",
+        expected: status.label || current.test.error && current.test.error.expected || "Não especificado",
+        actual: status.actual != null ? status.actual : mainRequest && mainRequest.receivedStatus != null ? mainRequest.receivedStatus : "Sem resposta",
+        curl: mainRequest && mainRequest.curl || "Não disponível",
+        screenshot: screenshot,
+      };
+      var text = buildEvidenceText(input);
+      var html = buildEvidenceHtml(input, evidenceImage.key === itemKey(current) ? evidenceImage.dataUrl : null);
+      copyEvidenceToClipboard({ text: text, html: html, imageBlob: evidenceImage.key === itemKey(current) ? evidenceImage.blob : null, hasScreenshot: Boolean(screenshot) }, {
+        isSecureContext: window.isSecureContext,
+        clipboard: navigator.clipboard,
+        ClipboardItem: window.ClipboardItem,
+        Blob: window.Blob,
+        fallbackCopy: function (value) { return fallbackCopyValue(value); },
+      }).then(function (result) {
+        var messages = {
+          complete: "Evidência completa copiada: texto, cURL e imagem.",
+          "without-image": "Texto e cURL copiados. O navegador bloqueou a cópia automática da imagem.",
+          "text-only": "Evidência textual copiada. Use “Abrir screenshot” para copiar a imagem.",
+          failed: "Não foi possível copiar a evidência.",
+        };
+        copyFeedback(copyButton, result !== "failed", messages[result]);
+      });
+    }
+  });
+  detail.addEventListener("keydown", function (event) {
+    if (!["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) return;
+    var tabs = Array.prototype.slice.call(detail.querySelectorAll('[role="tab"]'));
+    var index = tabs.indexOf(event.target);
+    if (index < 0) return;
+    event.preventDefault();
+    var next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+    state.view = tabs[next].dataset.detailTab;
+    renderDetail();
+    var target = detail.querySelector('[data-detail-tab="' + state.view + '"]');
+    if (target) target.focus();
   });
   window.addEventListener("resize", positionBarTimes);
   function updateThemeLabel() {
@@ -539,6 +674,10 @@ export const clientScript = String.raw`
     var savedTheme = localStorage.getItem("faillens-theme");
     if (savedTheme === "light" || savedTheme === "dark") document.documentElement.dataset.theme = savedTheme;
   } catch (_) {}
+  if (localToken && window.EventSource) {
+    var lifecycle = new EventSource("/__faillens/events?token=" + encodeURIComponent(localToken));
+    window.addEventListener("pagehide", function () { lifecycle.close(); }, { once: true });
+  }
   updateThemeLabel();
   document.querySelectorAll("[data-mode]").forEach(function (node) { node.classList.toggle("active", node.dataset.mode === state.mode); });
   renderSidebar();

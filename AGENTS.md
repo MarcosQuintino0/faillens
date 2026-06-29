@@ -3,6 +3,17 @@
 > Este arquivo é lido por Codex, ZCode/GLM e outros agentes de código.
 > Se o seu ambiente não carrega este arquivo automaticamente, cole-o como system prompt no início da sessão.
 
+## Documentação de referência
+
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — componentes, fronteiras e fluxo de dados
+- [`docs/BEHAVIORS.md`](docs/BEHAVIORS.md) — contratos observáveis e testes correspondentes
+- [`docs/TESTING.md`](docs/TESTING.md) — estratégia e checklist de testes
+- [`docs/SECURITY.md`](docs/SECURITY.md) — mascaramento, privacidade e superfícies protegidas
+- [`docs/REPORT_SCHEMA.md`](docs/REPORT_SCHEMA.md) — semântica e evolução do relatório
+- [`docs/adr/`](docs/adr/) — decisões arquiteturais duráveis
+
+Não duplique esses documentos aqui. Este arquivo é a fonte de regras operacionais para agentes; os documentos acima são as fontes de contexto e contratos.
+
 ---
 
 ## O que é este projeto
@@ -46,15 +57,17 @@ src/collector/
 
 src/reporter/
   buildReportModel.ts       → constrói FailLensReport a partir de specs brutos
+  buildPayloadDiff.ts       → marca divergências de payload apoiadas pelas assertions
   generateHtml.ts           → escreve o arquivo HTML standalone
   generateJson.ts           → escreve o arquivo JSON do relatório
   diagnostics/
-    diagnoseFailure.ts      → motor de diagnóstico determinístico (13 categorias)
+    diagnoseFailure.ts      → motor de diagnóstico determinístico (14 categorias)
     rules.ts                → regras de diagnóstico por status HTTP
     parseAssertionError.ts  → extrai expected/actual de mensagens de erro
 
 src/templates/
   reportTemplate.ts  → template HTML com CSS e JS embutidos
+  embeddedFont.ts    → fonte Geist embutida em base64
   styles.ts          → CSS do relatório
   clientScript.ts    → JavaScript do relatório interativo
 
@@ -309,6 +322,7 @@ type DiagnosisCategory =
   | "authorization-not-enforced"   // esperava 403, recebeu 2xx
   | "authentication-not-enforced"  // esperava 401, recebeu 2xx
   | "resource-not-found-mismatch"  // esperava 404, recebeu 2xx
+  | "duplicate-conflict"           // duplicidade deveria retornar 409, mas foi aceita
   | "success-expected-but-client-error"  // esperava 2xx, recebeu 4xx
   | "success-expected-but-server-error"  // esperava 2xx, recebeu 5xx
   | "persistence-mismatch"         // POST 2xx + GET 404 ou campos divergentes
@@ -382,3 +396,15 @@ node bin/faillens.js --help
 ✗ Usar cypress.config.ts (suporte apenas a .js na v0.1)
 ✗ Criar novo arquivo antes de verificar se o stdlib ou código existente resolve
 ```
+
+---
+
+## Manutenção da documentação
+
+- Mudou comportamento observável: atualize `docs/BEHAVIORS.md` e o teste correspondente.
+- Mudou arquitetura ou fronteira entre módulos: atualize `docs/ARCHITECTURE.md`.
+- Mudou o schema persistido: atualize `docs/REPORT_SCHEMA.md` e os testes de modelo/geração.
+- Mudou segurança ou persistência: atualize `docs/SECURITY.md`.
+- Mudou arquivo, responsabilidade ou cobertura: atualize `TEST_MAP.md`.
+- Houve uma decisão com alternativas e consequências duráveis: crie um ADR.
+- Refatoração interna sem mudança de contrato não exige um novo `.md`.

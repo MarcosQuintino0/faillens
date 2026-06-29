@@ -41,6 +41,14 @@ reports/faillens/faillens-report.json
 
 O HTML é standalone: CSS, JavaScript e dados ficam embutidos no próprio arquivo. Ele pode ser aberto localmente, sem servidor, CDN, fonte externa ou conexão com a internet.
 
+Para a experiência completa de evidência, abra o mesmo relatório pelo visualizador local temporário:
+
+```bash
+npx faillens open
+```
+
+O navegador abre em `127.0.0.1`, o servidor encerra automaticamente quando a última aba é fechada e nenhum dado sai da máquina. O HTML standalone continua disponível como fallback e artifact de CI.
+
 ## Exemplo Cypress
 
 Um projeto consumidor pode continuar usando `cy.request` sem importar helper algum:
@@ -122,6 +130,26 @@ Argumentos adicionais podem ser encaminhados ao Cypress depois de `--`:
 ```bash
 npx faillens run -- --browser chrome --spec "cypress/e2e/api/**/*.cy.js"
 ```
+
+Para executar, gerar e abrir o relatório no visualizador local:
+
+```bash
+npx faillens run --open -- --browser chrome
+```
+
+Em ambientes com `CI=true`, o navegador não é aberto e o exit code do Cypress continua preservado.
+
+### `faillens open`
+
+Abre o último relatório em um servidor temporário restrito a `127.0.0.1`:
+
+```bash
+npx faillens open
+npx faillens open --report reports/faillens
+npx faillens open --port 4317
+```
+
+A porta é escolhida automaticamente quando `--port` não é informado. Use `--no-browser` para iniciar sem abrir o navegador padrão. Fechar a última aba encerra o processo; `Ctrl+C` também continua disponível.
 
 ### `faillens generate`
 
@@ -231,6 +259,17 @@ npm pack --dry-run
 
 O código TypeScript fica em `src/`, e o build CommonJS com declarações fica em `dist/`.
 
+### Documentação para contribuidores e agentes
+
+- [Arquitetura](docs/ARCHITECTURE.md)
+- [Contratos de comportamento](docs/BEHAVIORS.md)
+- [Estratégia de testes](docs/TESTING.md)
+- [Segurança e privacidade](docs/SECURITY.md)
+- [Contrato do relatório](docs/REPORT_SCHEMA.md)
+- [Decisões arquiteturais](docs/adr/README.md)
+- [Mapa de testes](TEST_MAP.md)
+- [Limites de performance](PERFORMANCE_BUDGET.md)
+
 ## Limitações da versão 0.1
 
 - suporta somente Cypress E2E;
@@ -241,6 +280,14 @@ O código TypeScript fica em `src/`, e o build CommonJS com declarações fica e
 - a leitura do plano de assertions e os diagnósticos são heurísticos e determinísticos;
 - a prévia shell pode exigir ajustes manuais;
 - não usa IA.
+
+### Evidência para o dev
+
+Testes falhos exibem uma terceira aba ao lado de **Chamada selecionada** e **Script de reprodução**. Ela reúne resumo sanitizado, status esperado/recebido, cURL e, quando o Cypress gerou a imagem, um link relativo para o screenshot original e a ação **Copiar evidência**.
+
+Screenshots não são copiados, movidos nem embutidos no JSON/HTML: permanecem na pasta configurada pelo Cypress. A imagem do teste selecionado é carregada por referência e exibida somente ao abrir a aba de evidência. Por isso, o link e a prévia deixam de funcionar se o PNG for apagado ou movido. A cópia rica (`text/plain`, `text/html` e, quando permitido, `image/png`) depende das APIs do navegador; páginas `file://` podem bloquear canvas ou clipboard, mas o fallback textual, a prévia com cópia nativa/arraste e o botão **Abrir screenshot** continuam disponíveis. Nenhum dado é enviado ao Jira ou à internet.
+
+No modo `faillens open`, o PNG é entregue pela mesma origem local e convertido diretamente em `Blob`, removendo a limitação de canvas do `file://`. A permissão final do clipboard ainda pertence ao navegador e ao sistema operacional.
 
 ## Roadmap
 

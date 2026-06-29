@@ -1,12 +1,15 @@
 import path from "node:path";
 import { buildReportModel } from "../reporter/buildReportModel";
 import { generateHtml } from "../reporter/generateHtml";
+import { generateJson } from "../reporter/generateJson";
 import type { FailLensReport } from "../types/report";
 import { readJsonFile } from "../utils/fs";
+import { openReport } from "./open";
 
 export interface GenerateOptions {
   input?: string;
   output?: string;
+  open?: boolean;
 }
 
 export async function generateCommand(
@@ -34,5 +37,10 @@ export async function generateCommand(
   });
   const file = await generateHtml(report, output);
   console.log(`[FailLens] HTML standalone gerado em ${file}`);
+  if (options.open && !process.env.CI) {
+    const reportDir = path.dirname(file);
+    await generateJson(report, reportDir);
+    await openReport({ report: reportDir }, projectRoot);
+  }
   return 0;
 }

@@ -4,6 +4,7 @@ import type {
   FailLensSpec,
   FailLensTest,
   FailLensRequest,
+  FailLensScreenshot,
   TestState,
 } from "../types/report";
 import { generateCurl } from "./curlGenerator";
@@ -216,6 +217,11 @@ export class RequestStore {
       }));
     }
     return null;
+  }
+
+  setTestScreenshots(specPath: string, testId: string, screenshots: FailLensScreenshot[]): void {
+    const test = this.findTest(specPath, testId);
+    if (test && screenshots.length) test.evidence = { screenshots };
   }
 
   mergeSourceAssertions(specPath: string, plannedTests: PlannedTestAssertions[]): void {

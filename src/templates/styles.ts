@@ -255,6 +255,7 @@ pre { margin: 0; padding: 15px; overflow: auto; background: var(--code); color: 
 .debug-toolbar { min-height: 62px; display: flex; align-items: center; gap: 18px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
 .debug-tabs { display: flex; gap: 4px; padding: 3px; border-radius: 9px; background: var(--surface-soft); }
 .debug-tab { padding: 7px 12px; border: 0; border-radius: 7px; background: transparent; color: var(--faint); font-size: 11px; cursor: pointer; }
+.debug-tab:hover, .debug-tab:focus-visible { color: var(--text); outline: 2px solid transparent; box-shadow: 0 0 0 2px var(--violet); }
 .debug-tab.active { background: var(--surface); color: var(--text); font-weight: 700; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
 .debug-context { min-width: 0; overflow: hidden; color: var(--faint); font: 11px 'Geist Mono', ui-monospace, SFMono-Regular, Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .reproduction-help { margin: 0 0 10px; color: var(--muted); font-size: 11px; }
@@ -263,6 +264,25 @@ pre { margin: 0; padding: 15px; overflow: auto; background: var(--code); color: 
 .format-chip.active { border-color: #2a3650; background: #1a2233; color: #cdd4e0; }
 .reproduction-code pre { min-height: 250px; max-height: 500px; line-height: 1.8; }
 .empty-note { color: var(--muted); font-size: 11px; }
+.evidence-panel { display: grid; gap: 14px; }
+.evidence-heading, .evidence-screenshot-head, .evidence-empty { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.evidence-heading h3 { margin: 0; font-size: 14px; }
+.evidence-heading p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.evidence-summary, .evidence-screenshot, .evidence-empty { padding: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+.evidence-summary { display: grid; gap: 7px; }
+.evidence-summary > span { color: var(--red); font-size: 10px; font-weight: 700; text-transform: uppercase; }
+.evidence-summary > strong { font-size: 12px; line-height: 1.55; }
+.evidence-summary > div { display: flex; gap: 16px; color: var(--muted); font-size: 11px; }
+.evidence-screenshot-head > div, .evidence-empty > div { min-width: 0; }
+.evidence-screenshot strong, .evidence-empty strong { display: block; font-size: 11px; }
+.evidence-screenshot span, .evidence-empty span { display: block; overflow: hidden; margin-top: 4px; color: var(--muted); font-size: 10px; text-overflow: ellipsis; }
+.evidence-preview-wrap { margin-top: 14px; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--code); }
+.evidence-preview { display: block; width: 100%; max-height: 520px; object-fit: contain; background: #080b12; }
+.evidence-preview-wrap p { margin: 0; padding: 9px 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.45; }
+.evidence-link { flex: 0 0 auto; padding: 7px 11px; border: 1px solid var(--line); border-radius: 7px; color: var(--text); font-size: 10px; font-weight: 650; text-decoration: none; }
+.evidence-link:hover, .evidence-link:focus-visible { border-color: var(--violet); outline: 0; }
+.evidence-link.disabled { color: var(--faint); cursor: not-allowed; }
+.evidence-curl pre { min-height: 110px; }
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 50; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid rgba(74,222,128,.28); border-radius: 9px; background: #111a19; color: #d8f8e5; box-shadow: 0 12px 35px rgba(0,0,0,.35); opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none; transition: opacity .18s ease, transform .24s cubic-bezier(.2,.8,.2,1); }
 .toast.show { opacity: 1; transform: translateY(0) scale(1); }
 .toast-check { width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; background: rgba(74,222,128,.15); color: var(--green); font-weight: 800; animation: copy-pop .28s ease; }
@@ -305,6 +325,8 @@ pre { margin: 0; padding: 15px; overflow: auto; background: var(--code); color: 
   .debug-tabs { width: 100%; }
   .debug-tab { flex: 1; }
   .copy-button.primary { width: 100%; margin-left: 0; }
+  .evidence-heading, .evidence-screenshot-head, .evidence-empty { align-items: stretch; flex-direction: column; }
+  .evidence-link { text-align: center; }
 }
 @media (max-width: 440px) {
   .metrics-grid { grid-template-columns: 1fr; }

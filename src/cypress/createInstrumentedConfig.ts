@@ -43,6 +43,7 @@ export async function createInstrumentedConfig(
     resultsDir,
     outputDir: config.outputDir,
     config,
+    generateOnAfterRun: false,
   };
   const configSource = `"use strict";
 const loaded = require(${JSON.stringify(project.configPath)});
@@ -69,7 +70,10 @@ function collector(realOn) {
           let last;
           let pending;
           for (const handler of handlers) {
-            if (pending) pending = pending.then(() => handler(...args));
+            if (pending) pending = pending.then(async (previous) => {
+              const value = await handler(...args);
+              return value === undefined ? previous : value;
+            });
             else {
               const value = handler(...args);
               if (value && typeof value.then === "function") pending = Promise.resolve(value);

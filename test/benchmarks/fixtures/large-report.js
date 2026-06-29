@@ -1,104 +1,101 @@
 "use strict";
 
-const SPECS = 10;
-const TESTS_PER_SPEC = 10;
-const REQUESTS_PER_TEST = 5;
-const BODY_SIZE_KB = 2;
-
-function generateBody(index) {
-  const base = {
-    id: index,
-    name: `Entidade ${index}`,
-    email: `user${index}@example.com`,
-    role: index % 3 === 0 ? "admin" : "user",
-    createdAt: new Date(Date.now() - index * 60000).toISOString(),
-    metadata: { source: "api", version: "1.0", tags: [`tag-${index}`, `category-${index % 5}`] },
-  };
-  const padding = "x".repeat(Math.max(0, BODY_SIZE_KB * 1024 - JSON.stringify(base).length));
-  return { ...base, _pad: padding };
+function body(index, bodySize) {
+  const value = { id: `entity-${index}`, name: `Entity ${index}`, metadata: { source: "bench", index } };
+  return { ...value, padding: "x".repeat(Math.max(0, bodySize - JSON.stringify(value).length)) };
 }
 
-function generateRequest(specIndex, testIndex, reqIndex) {
-  const methods = ["POST", "GET", "PUT", "DELETE", "PATCH"];
-  const method = methods[reqIndex % methods.length];
+function screenshot(testIndex, retry = false) {
+  const suffix = retry ? " (failed) (attempt 2).png" : " (failed).png";
   return {
-    id: `req-${specIndex}-${testIndex}-${reqIndex}`,
-    order: reqIndex + 1,
+    relativePath: `cypress/screenshots/spec.cy.js/Suite -- Test ${testIndex}${suffix}`,
+    href: `../../cypress/screenshots/spec.cy.js/Suite%20--%20Test%20${testIndex}${suffix.replaceAll(" ", "%20")}`,
+    fileName: `Suite -- Test ${testIndex}${suffix}`,
+    size: 24_000,
+    width: 1280,
+    height: 720,
+    takenAt: `2026-06-28T10:${String(testIndex % 60).padStart(2, "0")}:00.000Z`,
+    attempt: retry ? 2 : 1,
+    kind: "failure",
+  };
+}
+
+function request(testIndex, requestIndex, bodySize) {
+  const previous = requestIndex > 0 ? `entity-${testIndex * 1000 + requestIndex - 1}` : "root";
+  const method = requestIndex % 3 === 0 ? "POST" : "GET";
+  return {
+    id: `req-${testIndex}-${requestIndex}`,
+    order: requestIndex + 1,
     phase: "chamada",
     method,
-    url: `http://localhost:3333/resources/${specIndex * 100 + testIndex}`,
-    originalUrl: `/resources/${specIndex * 100 + testIndex}`,
+    url: `http://localhost:3333/resources/${previous}`,
+    originalUrl: `/resources/${previous}`,
     requestHeaders: {
-      authorization: "Bearer token-de-acesso-longo-para-simular-producao",
+      authorization: "Bearer benchmark-secret",
       "content-type": "application/json",
-      "x-request-id": `req-${specIndex}-${testIndex}-${reqIndex}`,
-      "x-user-id": `user-${specIndex}`,
-      "x-trace-id": `trace-${Date.now()}`,
+      "x-request-id": `request-${testIndex}-${requestIndex}`,
     },
-    requestBody: method !== "GET" && method !== "DELETE" ? generateBody(specIndex * 100 + testIndex) : null,
-    responseHeaders: {
-      "content-type": "application/json",
-      "set-cookie": `session-id=session-cookie-value-${specIndex}; HttpOnly`,
-      "x-response-time": `${reqIndex * 10 + 45}ms`,
-    },
-    responseBody: generateBody(specIndex * 100 + testIndex + 1000),
-    receivedStatus: reqIndex === 0 ? 201 : reqIndex === 1 ? 200 : reqIndex === 2 ? 422 : 200,
-    durationMs: reqIndex * 15 + 45,
+    requestBody: method === "POST" ? body(testIndex * 1000 + requestIndex, bodySize) : null,
+    responseHeaders: { "content-type": "application/json", "set-cookie": "session=benchmark-secret" },
+    responseBody: body(testIndex * 1000 + requestIndex, bodySize),
+    receivedStatus: requestIndex === 0 ? 201 : 200,
+    durationMs: 20 + requestIndex,
     curl: "",
-    failOnStatusCode: reqIndex !== 2,
   };
 }
 
-function generateTest(specIndex, testIndex) {
-  const states = ["failed", "passed", "failed", "passed", "passed", "failed", "passed", "passed", "failed", "passed"];
-  const state = states[testIndex % states.length];
-  return {
-    id: `test-${specIndex}-${testIndex}`,
-    title: `Cenário ${testIndex + 1} do spec ${specIndex + 1}`,
-    titlePath: [`Suite ${specIndex + 1}`, `Cenário ${testIndex + 1} do spec ${specIndex + 1}`],
-    state,
-    durationMs: testIndex * 20 + 150,
-    error: state === "failed"
-      ? {
-          name: "AssertionError",
-          message: `expected 201 to equal 400`,
-          expected: 400,
-          actual: 201,
-          stack: `AssertionError: expected 201 to equal 400\n    at cypress/e2e/spec${specIndex}.cy.js:${testIndex + 5}:10`,
-        }
-      : undefined,
-    assertions: state === "failed"
-      ? [
-          { id: `a-${specIndex}-${testIndex}-1`, title: "Status deve ser 400", state: "failed", expected: 400, actual: 201 },
-          { id: `a-${specIndex}-${testIndex}-2`, title: "Body deve ter campo error", state: "pending" },
-          { id: `a-${specIndex}-${testIndex}-3`, title: "Headers de rate-limit presentes", state: "skipped" },
-        ]
-      : [],
-    requests: Array.from({ length: REQUESTS_PER_TEST }, (_, reqIndex) =>
-      generateRequest(specIndex, testIndex, reqIndex),
-    ),
-  };
-}
-
-function generateSpec(specIndex) {
-  return {
-    specPath: `cypress/e2e/spec${specIndex + 1}.cy.js`,
-    durationMs: (specIndex + 1) * 500,
-    tests: Array.from({ length: TESTS_PER_SPEC }, (_, testIndex) =>
-      generateTest(specIndex, testIndex),
-    ),
-  };
+function createReportFixture({
+  tests = 100,
+  requestsPerTest = 5,
+  failureRate = 0.7,
+  screenshotRate = 0,
+  multipleScreenshots = false,
+  bodySize = 256,
+  testsPerSpec = 100,
+} = {}) {
+  const specs = [];
+  for (let offset = 0; offset < tests; offset += testsPerSpec) {
+    const count = Math.min(testsPerSpec, tests - offset);
+    const specIndex = specs.length;
+    const specTests = Array.from({ length: count }, (_, localIndex) => {
+      const testIndex = offset + localIndex;
+      const failed = testIndex / tests < failureRate;
+      const hasScreenshot = failed && testIndex / Math.max(1, Math.ceil(tests * failureRate)) < screenshotRate;
+      const screenshots = hasScreenshot
+        ? [screenshot(testIndex, multipleScreenshots), ...(multipleScreenshots && testIndex % 5 === 0 ? [screenshot(testIndex)] : [])]
+        : [];
+      return {
+        id: `test-${testIndex}`,
+        title: `Test ${testIndex}`,
+        titlePath: [`Suite ${specIndex}`, `Test ${testIndex}`],
+        state: failed ? "failed" : "passed",
+        durationMs: 100 + requestsPerTest * 10,
+        error: failed
+          ? { name: "AssertionError", message: "expected 201 to equal 400", expected: 400, actual: 201 }
+          : undefined,
+        assertions: failed
+          ? [{ id: `assertion-${testIndex}`, title: "Status must be 400", target: "status", state: "failed", expected: 400, actual: 201 }]
+          : [],
+        requests: Array.from({ length: requestsPerTest }, (_, requestIndex) => request(testIndex, requestIndex, bodySize)),
+        evidence: screenshots.length ? { screenshots } : undefined,
+      };
+    });
+    specs.push({
+      specPath: `cypress/e2e/spec-${specIndex}.cy.js`,
+      durationMs: specTests.reduce((sum, item) => sum + item.durationMs, 0),
+      tests: specTests,
+    });
+  }
+  return specs;
 }
 
 function createLargeReportFixture() {
-  return Array.from({ length: SPECS }, (_, specIndex) => generateSpec(specIndex));
+  return createReportFixture({ tests: 100, requestsPerTest: 5, failureRate: 0.4, bodySize: 2048, testsPerSpec: 10 });
 }
 
 module.exports = {
+  createReportFixture,
   createLargeReportFixture,
-  SPECS,
-  TESTS_PER_SPEC,
-  REQUESTS_PER_TEST,
-  TOTAL_TESTS: SPECS * TESTS_PER_SPEC,
-  TOTAL_REQUESTS: SPECS * TESTS_PER_SPEC * REQUESTS_PER_TEST,
+  TOTAL_TESTS: 100,
+  TOTAL_REQUESTS: 500,
 };

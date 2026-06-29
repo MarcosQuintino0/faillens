@@ -14,6 +14,7 @@ import { round } from "../utils/format";
 import { diagnoseFailure } from "./diagnostics/diagnoseFailure";
 import { parseAssertionError } from "./diagnostics/parseAssertionError";
 import { buildPayloadDiff } from "./buildPayloadDiff";
+import { sanitizeEvidence } from "./evidence";
 
 const VERSION = "0.1.0";
 
@@ -56,6 +57,14 @@ const STATUS_REASON: Record<number, string> = {
 function statusReason(code: number | null | undefined): string {
   if (code == null) return "sem resposta";
   return STATUS_REASON[code] ? `${code} ${STATUS_REASON[code]}` : String(code);
+}
+
+function singleLine(value: unknown): string {
+  return String(value ?? "").replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").trim();
+}
+
+function isSafeJsonPath(value: string): boolean {
+  return value.split(".").every((part) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(part));
 }
 
 // "Chamada validada pelo teste": o sinal determin\u00edstico mais forte \u00e9 o request
@@ -153,11 +162,15 @@ function usesBearer(request: FailLensRequest): boolean {
   );
 }
 
-function appearsIn(request: FailLensRequest, value: string): boolean {
+function requestText(request: FailLensRequest): { url: string; body: string } {
+  let body = "";
+  try { body = JSON.stringify(request.requestBody ?? null); } catch { body = String(request.requestBody ?? ""); }
+  return { url: request.url || "", body };
+}
+
+function appearsIn(text: { url: string; body: string }, value: string): boolean {
   const encoded = encodeURIComponent(value);
-  const url = request.url || "";
-  const body = JSON.stringify(request.requestBody ?? null);
-  return url.includes(value) || url.includes(encoded) || body.includes(value);
+  return text.url.includes(value) || text.url.includes(encoded) || text.body.includes(value);
 }
 
 // Detecção 100% determinística: um valor da resposta vira variável APENAS se
@@ -168,6 +181,22 @@ function computeChain(requests: FailLensRequest[]): { used: ChainVariable[][]; g
   const used: ChainVariable[][] = requests.map(() => []);
   const generated: ChainVariable[][] = requests.map(() => []);
   const takenNames = new Set<string>();
+  const requestTexts = requests.map(requestText);
+  const bearerUsage = requests.map(usesBearer);
+  const requestOffsets: number[] = [];
+  const requestChunks = requestTexts.map((text) => `${text.url}\n${text.body}\u0000`);
+  let textLength = 0;
+  for (const chunk of requestChunks) {
+    requestOffsets.push(textLength);
+    textLength += chunk.length;
+  }
+  const allRequestText = requestChunks.join("");
+  const bearerAfter: boolean[] = requests.map(() => false);
+  let laterBearer = false;
+  for (let index = requests.length - 1; index >= 0; index -= 1) {
+    bearerAfter[index] = laterBearer;
+    laterBearer ||= bearerUsage[index];
+  }
   const uniqueName = (base: string): string => {
     let name = base || "VALUE";
     let suffix = 2;
@@ -175,33 +204,65 @@ function computeChain(requests: FailLensRequest[]): { used: ChainVariable[][]; g
     takenNames.add(name);
     return name;
   };
-  const available: ChainVariable[] = [];
+  const availableValues = new Set<string>();
+  const variableUses = new Map<ChainVariable, number[]>();
+  let tokenAvailable = false;
+  const requestIndexAt = (position: number): number => {
+    let low = 0;
+    let high = requestOffsets.length - 1;
+    while (low <= high) {
+      const middle = (low + high) >>> 1;
+      if (requestOffsets[middle] <= position) low = middle + 1;
+      else high = middle - 1;
+    }
+    return Math.max(0, high);
+  };
+  const findUses = (value: string, sourceIndex: number): number[] => {
+    const indexes = new Set<number>();
+    const futureOffset = sourceIndex + 1 < requestOffsets.length
+      ? requestOffsets[sourceIndex + 1]
+      : allRequestText.length;
+    const encoded = encodeURIComponent(value);
+    for (const needle of encoded === value ? [value] : [value, encoded]) {
+      let position = allRequestText.indexOf(needle, futureOffset);
+      while (position >= 0) {
+        const requestIndex = requestIndexAt(position);
+        if (requestIndex > sourceIndex && appearsIn(requestTexts[requestIndex], value)) indexes.add(requestIndex);
+        position = allRequestText.indexOf(
+          needle,
+          requestOffsets[requestIndex] + requestChunks[requestIndex].length,
+        );
+      }
+    }
+    return Array.from(indexes).sort((left, right) => left - right);
+  };
 
   requests.forEach((request, index) => {
-    available.forEach((variable) => {
-      const isUse = variable.kind === "token"
-        ? usesBearer(request)
-        : variable.value !== undefined && appearsIn(request, variable.value);
-      if (isUse && !used[index].some((item) => item.ref === variable.ref)) used[index].push(variable);
-    });
-
     const scalars = collectScalars(request.responseBody);
     const newVars: ChainVariable[] = [];
     const tokenField = findTokenField(request.responseBody);
-    if (tokenField && requests.slice(index + 1).some(usesBearer) && !available.some((item) => item.kind === "token")) {
+    if (tokenField && isSafeJsonPath(tokenField.path) && bearerAfter[index] && !tokenAvailable) {
       const name = uniqueName("TOKEN");
-      newVars.push({ name, ref: `$${name}`, path: tokenField.path, value: undefined, kind: "token" });
+      const variable: ChainVariable = { name, ref: `$${name}`, path: tokenField.path, value: undefined, kind: "token" };
+      variableUses.set(variable, bearerUsage.flatMap((uses, requestIndex) => uses && requestIndex > index ? [requestIndex] : []));
+      newVars.push(variable);
     }
     scalars.forEach((scalar) => {
       if (scalar.value.length < 3) return;
-      if (available.some((item) => item.value === scalar.value) || newVars.some((item) => item.value === scalar.value)) return;
-      if (!requests.slice(index + 1).some((later) => appearsIn(later, scalar.value))) return;
+      if (!isSafeJsonPath(scalar.path)) return;
+      if (availableValues.has(scalar.value) || newVars.some((item) => item.value === scalar.value)) return;
+      const useIndexes = findUses(scalar.value, index);
+      if (!useIndexes.length) return;
       const name = uniqueName(shellNameFromKey(scalar.key));
-      newVars.push({ name, ref: `$${name}`, path: scalar.path, value: scalar.value, kind: "value" });
+      const variable: ChainVariable = { name, ref: `$${name}`, path: scalar.path, value: scalar.value, kind: "value" };
+      variableUses.set(variable, useIndexes);
+      newVars.push(variable);
     });
     newVars.forEach((variable) => {
       generated[index].push(variable);
-      available.push(variable);
+      for (const requestIndex of variableUses.get(variable) || []) used[requestIndex].push(variable);
+      if (variable.kind === "token") tokenAvailable = true;
+      else if (variable.value !== undefined) availableValues.add(variable.value);
     });
   });
 
@@ -223,9 +284,15 @@ function applyVariable(command: string, variable: ChainVariable): string {
   return result.replace(/'([^'\n]*\$[A-Z_][A-Z0-9_]*[^'\n]*)'/g, '"$1"');
 }
 
-function annotateRequests(test: FailLensTest, main: FailLensRequest | undefined): void {
+type RequestChain = ReturnType<typeof computeChain>;
+
+function annotateRequests(
+  test: FailLensTest,
+  main: FailLensRequest | undefined,
+  chain: RequestChain,
+): void {
   const mainIndex = main ? test.requests.findIndex((request) => request.id === main.id) : -1;
-  const { used, generated } = computeChain(test.requests);
+  const { used, generated } = chain;
 
   test.requests.forEach((request, index) => {
     if (request.id === main?.id) request.phase = "validacao";
@@ -239,21 +306,21 @@ function annotateRequests(test: FailLensTest, main: FailLensRequest | undefined)
   });
 }
 
-function buildReproductionScript(test: FailLensTest): string {
+function buildReproductionScript(test: FailLensTest, chain: RequestChain): string {
   const requests = test.requests;
   if (!requests.length) return "";
-  const { used, generated } = computeChain(requests);
+  const { used, generated } = chain;
   const expectation = test.statusExpectation;
 
   const lines: string[] = [
     "# Reprodução determinística — gerada pelo FailLens",
     "# Requer curl; extração de variáveis usa jq.",
   ];
-  if (test.title) lines.push(`# Teste: ${test.title}`);
+  if (test.title) lines.push(`# Teste: ${singleLine(test.title)}`);
   if (expectation && expectation.actual !== undefined) {
     lines.push(
       `# Veredito: ${test.state === "failed" ? "FALHOU" : "OK"}` +
-        ` · status esperado ${expectation.label} · recebido ${expectation.actual}`,
+        ` · status esperado ${singleLine(expectation.label)} · recebido ${expectation.actual}`,
     );
   }
 
@@ -263,13 +330,13 @@ function buildReproductionScript(test: FailLensTest): string {
 
     lines.push("");
     lines.push(
-      `# [${index + 1}] ${request.method} ${pathOf(request)}` +
+      `# [${index + 1}] ${singleLine(request.method)} ${singleLine(pathOf(request))}` +
         `  →  ${statusReason(request.receivedStatus)}  ·  ${Math.round(request.durationMs || 0)} ms`,
     );
     if (request.id === test.mainRequestId) {
       let mark = "#     >> chamada validada pelo teste";
       if (expectation && expectation.actual !== undefined) {
-        mark += ` (esperado ${expectation.label}, recebido ${expectation.actual})`;
+        mark += ` (esperado ${singleLine(expectation.label)}, recebido ${expectation.actual})`;
       }
       lines.push(mark);
     }
@@ -383,16 +450,18 @@ function prepareTest(source: FailLensTest, maskFields: string[]): FailLensTest {
       : source.title,
     error: maskError(source.error, maskFields),
     requests: source.requests.map((request) => sanitizeRequest(request, maskFields)),
+    evidence: sanitizeEvidence(source.evidence),
   };
   const main = inferMainRequest(test);
+  const chain = computeChain(test.requests);
   test.assertions = prepareAssertions(source, test.error, maskFields);
   test.mainRequestId = main?.id;
-  annotateRequests(test, main);
+  annotateRequests(test, main, chain);
   test.statusExpectation = resolveStatusExpectation(test, main);
   test.payloadDiff = buildPayloadDiff(test.assertions, main?.responseBody, test.state === "failed");
   test.diagnosis = diagnoseFailure({ test, mainRequest: main });
   test.reproductionScript = test.state === "failed" && test.requests.length
-    ? buildReproductionScript(test)
+    ? buildReproductionScript(test, chain)
     : undefined;
   return test;
 }
@@ -428,7 +497,7 @@ export function buildReportModel(
       runId: options.config?.runId,
       branch: options.config?.branch,
     },
-    theme: options.config?.theme ?? "dark",
+    theme: options.config?.theme === "light" ? "light" : "dark",
     summary: {
       tests: total,
       passed,

@@ -26,13 +26,15 @@ function duration(ms: number): string {
 
 export function reportTemplate(report: FailLensReport): string {
   const project = report.project?.name || report.specs[0]?.specPath || "Projeto Cypress";
+  const theme = report.theme === "light" ? "light" : "dark";
   const passedText = `${report.summary.passed} de ${report.summary.tests} testes passaram`;
   return `<!doctype html>
-<html lang="pt-BR" data-theme="${report.theme || "dark"}">
+<html lang="pt-BR" data-theme="${theme}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="generator" content="FailLens ${report.tool.version}">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline' data:; font-src data:; img-src 'self' data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta name="generator" content="FailLens ${escapeHtml(String(report.tool.version))}">
   <title>${escapeHtml(project)} · FailLens</title>
   <style>${embeddedFont}</style>
   <style>${styles}</style>

@@ -94,15 +94,87 @@ test("JSON embutido é válido e contém os dados do relatório", async () => {
   assert.ok(data.summary);
 });
 
+test("JavaScript interativo embutido é sintaticamente válido", async () => {
+  const { html } = await buildAndGenerate([makeSpec([makeTest("t1")])]);
+  const scripts = [...html.matchAll(/<script(?![^>]+type="application\/json")[^>]*>([\s\S]*?)<\/script>/g)];
+  assert.equal(scripts.length, 1);
+  assert.doesNotThrow(() => new Function(scripts[0][1]));
+});
+
 test("HTML contém as seções principais do relatório", async () => {
   const { html } = await buildAndGenerate([makeSpec([makeTest("t1")])]);
   assert.match(html, /Sequência de chamadas|sequence-legend|request-row/);
   assert.match(html, /Motivo da falha|diagnosis/);
   assert.match(html, /Esperado vs\. recebido|diff-line/);
   assert.match(html, /Script de reprodução|data-detail-tab="script"/);
+  assert.match(html, /Evidência para o dev|data-detail-tab="evidence"/);
   assert.match(html, /Copiado para a área de transferência/);
   assert.match(html, /redirect-badge/);
   assert.match(html, /redirect-trail/);
+});
+
+test("toolbar mantém as três abas na ordem, com ARIA e navegação por teclado", async () => {
+  const { html } = await buildAndGenerate([makeSpec([makeTest("t1")])]);
+  assert.match(html, /role="tablist"[\s\S]*data-detail-tab="call"[\s\S]*data-detail-tab="script"[\s\S]*data-detail-tab="evidence"/);
+  assert.match(html, /role="tab"/);
+  assert.match(html, /aria-selected=/);
+  assert.match(html, /ArrowRight|ArrowLeft/);
+});
+
+test("aba de evidência inclui resumo, cURL, ações e estado sem screenshot", async () => {
+  const { html } = await buildAndGenerate([makeSpec([makeTest("t1")])]);
+  assert.match(html, /Evidência para o desenvolvedor/);
+  assert.match(html, /Copiar evidência/);
+  assert.match(html, /Copiar cURL/);
+  assert.match(html, /Abrir screenshot/);
+  assert.match(html, /O Cypress não gerou screenshot para este teste/);
+  assert.match(html, /Evidência completa copiada: texto, cURL e imagem/);
+  assert.match(html, /Texto e cURL copiados\. O navegador bloqueou a cópia automática da imagem/);
+  assert.match(html, /Evidência textual copiada\. Use “Abrir screenshot” para copiar a imagem/);
+});
+
+test("screenshot usa link relativo seguro e nunca embute bytes PNG", async () => {
+  const test_ = makeTest("shot");
+  test_.evidence = { screenshots: [{
+    relativePath: "cypress/screenshots/usuários.cy.js/falha (failed).png",
+    href: "../../cypress/screenshots/usu%C3%A1rios.cy.js/falha%20(failed).png",
+    fileName: "falha (failed).png",
+    size: 123,
+    kind: "failure",
+  }] };
+  const { html } = await buildAndGenerate([makeSpec([test_])]);
+  assert.match(html, /target="_blank"/);
+  assert.match(html, /rel="noopener noreferrer"/);
+  assert.match(html, /usu%C3%A1rios\.cy\.js/);
+  assert.match(html, /class="evidence-preview"/);
+  assert.match(html, /data-evidence-preview/);
+  assert.match(html, /loading="lazy"/);
+  assert.match(html, /Clique com o botão direito na imagem para copiá-la/);
+  assert.match(html, /detail\.querySelector\("\[data-evidence-preview\]"\)/);
+  assert.doesNotMatch(html, /data:image\/png;base64|iVBORw0KGgo|PNG\r?\n/);
+});
+
+test("preview do screenshot só é criado no conteúdo da aba de evidência", async () => {
+  const { html } = await buildAndGenerate([makeSpec([makeTest("t1")])]);
+  assert.match(html, /state\.view === "evidence"\) prepareEvidenceImage/);
+  const staticMarkup = html.replace(/<script[\s\S]*?<\/script>/gi, "");
+  assert.doesNotMatch(staticMarkup, /<img[^>]+evidence-preview/i);
+});
+
+test("CSP continua offline e permite somente imagens relativas, data e blob", async () => {
+  const { html } = await buildAndGenerate();
+  assert.match(html, /connect-src 'none'/);
+  assert.match(html, /img-src 'self' data: blob:/);
+  assert.doesNotMatch(html, /connect-src \*|<(?:script|link|img)[^>]+(?:src|href)="https?:\/\//i);
+});
+
+test("cliente ativa transporte local, lifecycle e leitura direta do PNG somente em localhost", async () => {
+  const { html } = await buildAndGenerate([makeSpec([makeTest("t1")])]);
+  assert.match(html, /localToken = \/\^https\?:\$\//);
+  assert.match(html, /\/__faillens\/evidence\?token=/);
+  assert.match(html, /fetch\(evidenceUrl\(screenshot\)/);
+  assert.match(html, /new EventSource\("\/__faillens\/events\?token=/);
+  assert.match(html, /window\.addEventListener\("pagehide"/);
 });
 
 test("tema dark aplicado por padrão", async () => {

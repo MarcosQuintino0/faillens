@@ -5,6 +5,11 @@ import { createInstrumentedConfig } from "../cypress/createInstrumentedConfig";
 import { generateReportArtifacts, loadPartialSpecs } from "../cypress/registerNodeEvents";
 import { detectCypress } from "./detectCypress";
 import { loadFailLensConfig } from "./config";
+import { openReport } from "./open";
+
+export interface RunOptions {
+  open?: boolean;
+}
 
 function resolveCypressBin(projectRoot: string): string {
   try {
@@ -43,6 +48,7 @@ function executeCypress(
 export async function runCommand(
   forwardedArgs: string[] = [],
   projectRoot = process.cwd(),
+  options: RunOptions = {},
 ): Promise<number> {
   console.log("[FailLens] Detectando o projeto Cypress…");
   const config = await loadFailLensConfig(projectRoot);
@@ -65,11 +71,13 @@ export async function runCommand(
       await generateReportArtifacts(specs, config.outputDir, config);
       console.log(`[FailLens] Relatório disponível em ${path.join(config.outputDir, "index.html")}`);
       console.log(`[FailLens] Dados disponíveis em ${path.join(config.outputDir, "faillens-report.json")}`);
+      if (options.open && !process.env.CI) {
+        await openReport({ report: config.outputDir }, project.projectRoot);
+      }
     } catch (error) {
       console.error(
         `[FailLens] Não foi possível finalizar o relatório: ${error instanceof Error ? error.message : String(error)}`,
       );
-      if (exitCode === 0) exitCode = 1;
     }
   }
   return exitCode;

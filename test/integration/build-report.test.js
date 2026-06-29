@@ -388,3 +388,36 @@ test("falha de status preserva destaque observacional para campo nulo da respost
     evidenceOnly: true,
   }]);
 });
+
+test("evidence preserva somente metadata segura e compatibilidade sem screenshot", () => {
+  const safe = makeFailedTest("safe");
+  safe.evidence = { screenshots: [{
+    relativePath: "cypress/screenshots/api.cy.js/falha (failed).png",
+    href: "../../cypress/screenshots/api.cy.js/falha%20(failed).png",
+    fileName: "falha (failed).png",
+    size: 100,
+    kind: "failure",
+  }] };
+  const unsafe = makeFailedTest("unsafe");
+  unsafe.evidence = { screenshots: [{
+    relativePath: "../../segredo.png",
+    href: "file:///C:/segredo.png",
+    fileName: "segredo.png",
+    size: 100,
+    kind: "failure",
+  }, {
+    relativePath: "cypress/screenshots/base64.png",
+    href: "data:image/png;base64,iVBORw0KGgo",
+    fileName: "base64.png",
+    size: 100,
+    kind: "failure",
+  }] };
+  const without = makeFailedTest("without");
+  delete without.evidence;
+
+  const report = buildReportModel([makeSpec("api.cy.js", [safe, unsafe, without])]);
+  assert.equal(report.specs[0].tests[0].evidence.screenshots.length, 1);
+  assert.equal(report.specs[0].tests[1].evidence, undefined);
+  assert.equal(report.specs[0].tests[2].evidence, undefined);
+  assert.doesNotMatch(JSON.stringify(report), /file:\/\/|data:image|iVBORw0KGgo|\.\.\/\.\.\/segredo/);
+});
