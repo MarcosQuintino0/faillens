@@ -465,12 +465,16 @@ export const clientScript = String.raw`
       var screenshot = test.evidence && test.evidence.screenshots && test.evidence.screenshots[0];
       var screenshotSource = evidenceUrl(screenshot);
       var summary = test.diagnosis && test.diagnosis.summary || test.error && test.error.message || "Falha registrada sem resumo.";
+      var bddText = test.bddScenario && test.bddScenario.text;
+      var bddHtml = bddText
+        ? '<div class="code-panel evidence-curl"><div class="code-head"><span class="code-title">Cenário BDD</span></div><pre>' + e(bddText) + '</pre></div>'
+        : '';
       var screenshotHtml = screenshot
         ? '<div class="evidence-screenshot"><div class="evidence-screenshot-head"><div><strong>Screenshot do Cypress</strong><span>' + e(screenshot.fileName) + '</span></div><a class="evidence-link" href="' + e(screenshotSource) + '" target="_blank" rel="noopener noreferrer">Abrir screenshot</a></div>' +
           '<div class="evidence-preview-wrap"><img class="evidence-preview" data-evidence-preview src="' + e(screenshotSource) + '" alt="Screenshot do Cypress: ' + e(screenshot.fileName) + '" loading="lazy" decoding="async" draggable="true"><p>Clique com o botão direito na imagem para copiá-la ou arraste-a para o Jira quando a cópia automática for bloqueada.</p></div></div>'
         : '<div class="evidence-empty"><div><strong>O Cypress não gerou screenshot para este teste.</strong><span>A evidência textual e o cURL ainda podem ser copiados.</span></div><span class="evidence-link disabled" aria-disabled="true">Abrir screenshot</span></div>';
       content = '<div class="evidence-panel"><div class="evidence-heading"><div><h3>Evidência para o desenvolvedor</h3><p>Resumo sanitizado para compartilhar em um chamado.</p></div><button class="copy-button primary" data-copy-kind="evidence">Copiar evidência</button></div>' +
-        '<div class="evidence-summary"><span>Falha</span><strong>' + e(summary) + '</strong><div><span>Esperado: <b>' + e(expected) + '</b></span><span>Recebido: <b>' + e(actual) + '</b></span></div></div>' +
+        '<div class="evidence-summary"><span>Falha</span><strong>' + e(summary) + '</strong><div><span>Esperado: <b>' + e(expected) + '</b></span><span>Recebido: <b>' + e(actual) + '</b></span></div></div>' + bddHtml +
         '<div class="code-panel evidence-curl"><div class="code-head"><span class="code-title">cURL para reprodução</span><button class="copy-button mini" data-copy-kind="evidence-curl" aria-label="Copiar cURL">' + COPY_ICON + ' Copiar cURL</button></div><pre>' + e(main && main.curl || "Nenhuma request disponível.") + '</pre></div>' + screenshotHtml + '</div>';
     }
     return '<section class="panel debug-panel"><div class="debug-toolbar">' + tabs + '<span class="debug-context">' + e(hint) + '</span></div>' +
@@ -618,6 +622,7 @@ export const clientScript = String.raw`
         failure: current.test.diagnosis && current.test.diagnosis.summary || current.test.error && current.test.error.message || "Falha registrada sem resumo.",
         expected: status.label || current.test.error && current.test.error.expected || "Não especificado",
         actual: status.actual != null ? status.actual : mainRequest && mainRequest.receivedStatus != null ? mainRequest.receivedStatus : "Sem resposta",
+        bdd: current.test.bddScenario && current.test.bddScenario.text,
         curl: mainRequest && mainRequest.curl || "Não disponível",
         screenshot: screenshot,
       };

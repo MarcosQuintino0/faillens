@@ -96,6 +96,19 @@ test("múltiplos POSTs — escolhe o com status matching o erro", () => {
   assert.equal(inferMainRequest(test_).id, "req-post-2");
 });
 
+test("operação de regra resolvida desempata setup e ação pelo último método correspondente", () => {
+  const setup = makeRequest("req-setup", "POST", "/users", 201);
+  const action = makeRequest("req-action", "POST", "/users", 201);
+  const test_ = makeTest("rejeita duplicidade", [setup, action], 201);
+  const refs = [{
+    ruleId: "codigo-duplicado",
+    resolved: true,
+    contractId: "users",
+    rule: { id: "codigo-duplicado", attributes: { operation: "POST" }, raw: "" },
+  }];
+  assert.equal(inferMainRequest(test_, refs).id, "req-action");
+});
+
 test("sem erro e sem título com palavra-chave — mutação (DELETE) vence GET pelo score de método", () => {
   const req1 = makeRequest("req-1", "GET", "/users");
   const req2 = makeRequest("req-2", "DELETE", "/users/1");

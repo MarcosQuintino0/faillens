@@ -128,6 +128,8 @@ test("aba de evidência inclui resumo, cURL, ações e estado sem screenshot", a
   assert.match(html, /Evidência para o desenvolvedor/);
   assert.match(html, /Copiar evidência/);
   assert.match(html, /Copiar cURL/);
+  assert.match(html, /Cenário BDD/);
+  assert.match(html, /bddScenario && test\.bddScenario\.text/);
   assert.match(html, /Abrir screenshot/);
   assert.match(html, /O Cypress não gerou screenshot para este teste/);
   assert.match(html, /Evidência completa copiada: texto, cURL e imagem/);

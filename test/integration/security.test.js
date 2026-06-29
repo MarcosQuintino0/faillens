@@ -115,3 +115,19 @@ test("evidence rejeita hrefs executáveis, traversal e caminhos absolutos", () =
   assert.equal(report.specs[0].tests[0].evidence, undefined);
   assert.doesNotMatch(html, /javascript:|file:\/\/|C:\/secret|\.\.\/\.\.\/secret/);
 });
+
+test("BDD malicioso permanece dado inerte no HTML e não vira markup executável", () => {
+  const source = failedTest({
+    requests: [request({
+      method: "GET",
+      url: "https://api.example.test/items/%3Cimg%20src=x%20onerror=PWNED%3E",
+      receivedStatus: 500,
+    })],
+    error: { name: "AssertionError", message: "expected 500 to equal 404", actual: 500, expected: 404 },
+  });
+  const report = buildReportModel([{ specPath: "api.cy.js", durationMs: 10, tests: [source] }]);
+  const html = reportTemplate(report);
+  assert.match(report.specs[0].tests[0].bddScenario.text, /%3Cimg%20src=x%20onerror=PWNED%3E/);
+  assert.doesNotMatch(html, /<img src=x onerror=PWNED>/i);
+  assert.match(html, /%3Cimg%20src=x%20onerror=PWNED%3E/);
+});

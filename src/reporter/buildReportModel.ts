@@ -15,6 +15,7 @@ import { diagnoseFailure } from "./diagnostics/diagnoseFailure";
 import { parseAssertionError } from "./diagnostics/parseAssertionError";
 import { buildPayloadDiff } from "./buildPayloadDiff";
 import { sanitizeEvidence } from "./evidence";
+import { buildBddScenario } from "./buildBddScenario";
 import { buildFacts, buildPersistenceState } from "./provenance/buildFacts";
 import { contractIdForSpec, resolveContracts, resolveRuleRef, type ResolvedContracts } from "./provenance/resolveContracts";
 import type { FailLensContract, FailLensRuleRef } from "../types/report";
@@ -101,13 +102,18 @@ function isSafeJsonPath(value: string): boolean {
 // cujo status recebido \u00e9 igual ao 'actual' afirmado pela asser\u00e7\u00e3o. Depois disso,
 // preferimos m\u00e9todos de muta\u00e7\u00e3o e a ordem. Sem palavras de t\u00edtulo nem nomes de
 // endpoint \u2014 funciona em qualquer API e qualquer idioma.
-export function inferMainRequest(test: FailLensTest): FailLensRequest | undefined {
+export function inferMainRequest(test: FailLensTest, ruleRefs: FailLensRuleRef[] = []): FailLensRequest | undefined {
   if (!test.requests.length) return undefined;
   const actual = numeric(test.error?.actual);
+  const operations = new Set(ruleRefs
+    .filter((ref) => ref.resolved && typeof ref.rule?.attributes.operation === "string")
+    .map((ref) => String(ref.rule?.attributes.operation).toUpperCase()));
+  const contractOperation = operations.size === 1 ? Array.from(operations)[0] : undefined;
   let winner = test.requests[0];
   let winnerScore = -Infinity;
   test.requests.forEach((request, index) => {
     let score = 0;
+    if (contractOperation && request.method === contractOperation) score += 100 + index * 0.02;
     if (actual !== undefined && request.receivedStatus === actual) score += 50;
     if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) score += 5;
     score -= index * 0.01; // empate: a a\u00e7\u00e3o costuma vir antes da verifica\u00e7\u00e3o
@@ -481,8 +487,14 @@ function prepareTest(
   maskFields: string[],
   ruleIndex?: ResolvedContracts["ruleIndex"],
   contextContractId?: string,
+  contracts: FailLensContract[] = [],
 ): FailLensTest {
-  const { persistenceExpectation: _sourceExpectation, persistenceEvidence: _sourceEvidence, ...safeSource } = source;
+  const {
+    persistenceExpectation: _sourceExpectation,
+    persistenceEvidence: _sourceEvidence,
+    bddScenario: _sourceBdd,
+    ...safeSource
+  } = source;
   const test: FailLensTest = {
     ...safeSource,
     title: source.titlePath?.length
@@ -492,17 +504,18 @@ function prepareTest(
     requests: source.requests.map((request) => sanitizeRequest(request, maskFields)),
     evidence: sanitizeEvidence(source.evidence),
   };
-  const main = inferMainRequest(test);
+  // Procedência: resolve o vínculo antes de escolher a request principal, pois
+  // operation= do contrato é um discriminador confiável entre setup e ação.
+  const resolvedRefs: FailLensRuleRef[] = (source.ruleRefs || []).map((ref) =>
+    ruleIndex ? resolveRuleRef(ref, ruleIndex, contextContractId) : { ...ref, resolved: false },
+  );
+  const main = inferMainRequest(test, resolvedRefs);
   const chain = computeChain(test.requests);
   test.assertions = prepareAssertions(source, test.error, maskFields);
   test.mainRequestId = main?.id;
   annotateRequests(test, main, chain);
   test.statusExpectation = resolveStatusExpectation(test, main);
 
-  // Procedência: resolve o vínculo teste->regra e monta os facts.
-  const resolvedRefs: FailLensRuleRef[] = (source.ruleRefs || []).map((ref) =>
-    ruleIndex ? resolveRuleRef(ref, ruleIndex, contextContractId) : { ...ref, resolved: false },
-  );
   if (resolvedRefs.length) {
     // Persistimos um vínculo enxuto; os detalhes da regra ficam em report.contracts
     // (mascarado). Evita duplicar e re-vazar a mensagem da regra por teste.
@@ -534,6 +547,8 @@ function prepareTest(
 
   test.payloadDiff = buildPayloadDiff(test.assertions, main?.responseBody, test.state === "failed");
   test.diagnosis = diagnoseFailure({ test, mainRequest: main });
+  const bddContractId = test.contractId || contextContractId;
+  test.bddScenario = buildBddScenario(test, main, resolvedRefs, contracts.find((item) => item.id === bddContractId));
   test.reproductionScript = test.state === "failed" && test.requests.length
     ? buildReproductionScript(test, chain)
     : undefined;
@@ -551,9 +566,10 @@ export function buildReportModel(
 ): FailLensReport {
   const maskFields = options.config?.maskFields ?? [];
   const resolved = resolveContracts(inputSpecs);
+  const contracts = resolved.contracts.map((contract) => sanitizeContract(contract, maskFields));
   const specs = inputSpecs.map((spec) => {
     const contextContractId = contractIdForSpec(spec.specPath, resolved.contracts);
-    const tests = spec.tests.map((test) => prepareTest(test, maskFields, resolved.ruleIndex, contextContractId));
+    const tests = spec.tests.map((test) => prepareTest(test, maskFields, resolved.ruleIndex, contextContractId, contracts));
     return {
       specPath: spec.specPath,
       durationMs: spec.durationMs || tests.reduce((sum, test) => sum + test.durationMs, 0),
@@ -584,8 +600,8 @@ export function buildReportModel(
       passRate: total ? round((passed / total) * 100, 1) : 0,
     },
     specs,
-    ...(resolved.contracts.length
-      ? { contracts: resolved.contracts.map((contract) => sanitizeContract(contract, maskFields)) }
+    ...(contracts.length
+      ? { contracts }
       : {}),
   };
 }

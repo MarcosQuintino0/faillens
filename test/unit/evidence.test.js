@@ -13,6 +13,7 @@ function evidenceInput() {
     expected: "400",
     actual: "500",
     curl: "curl -X POST 'https://api.test/users' -H 'authorization: Bearer <TOKEN>'",
+    bdd: 'DADO que o payload não continha o campo "email"\nQUANDO foi executado POST /users',
     screenshot: {
       relativePath: "cypress/screenshots/usuários.cy.js/falha (failed).png",
       href: "../../cypress/screenshots/usu%C3%A1rios.cy.js/falha%20(failed).png",
@@ -31,6 +32,10 @@ test("evidência textual é determinística e usa somente cURL sanitizado/path r
     "Esperado: 400",
     "Recebido: 500",
     "",
+    "Cenário BDD:",
+    'DADO que o payload não continha o campo "email"',
+    "QUANDO foi executado POST /users",
+    "",
     "cURL:",
     "curl -X POST 'https://api.test/users' -H 'authorization: Bearer <TOKEN>'",
     "",
@@ -46,6 +51,7 @@ test("HTML rico escapa conteúdo e só aceita data URL PNG em memória", () => {
   const html = buildEvidenceHtml(input, "data:image/png;base64,AAA=");
   assert.match(html, /&lt;img src=x onerror=&quot;PWNED&quot;&gt;/);
   assert.match(html, /data:image\/png;base64,AAA=/);
+  assert.match(html, /<h2>Cenário BDD<\/h2>/);
   assert.doesNotMatch(buildEvidenceHtml(input, "javascript:alert(1)"), /javascript:/);
 });
 

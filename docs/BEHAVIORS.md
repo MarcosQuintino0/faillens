@@ -123,6 +123,20 @@ Cada informação que o FailLens poderá usar em BDD, resultado atual, resultado
 - Implementação: `src/collector/parseContractJsdoc.ts`, `src/collector/extractTestTags.ts` (`parseCatalogModule`/`findImportSource`), `src/cypress/registerNodeEvents.ts` (`resolveCatalogTags`), `src/reporter/provenance/resolveContracts.ts`, `src/reporter/provenance/buildFacts.ts`, `src/reporter/buildReportModel.ts`
 - Testes: `test/unit/parse-contract-jsdoc.test.js`, `test/unit/extract-test-tags.test.js`, `test/integration/provenance.test.js`
 
+## BDD determinístico para chamados
+
+Testes falhos recebem `bddScenario`, construído sem IA a partir do modelo já sanitizado. Cada linha guarda keyword, texto e fontes rastreáveis. O cenário é exibido apenas na aba **Evidência para o dev** e incluído em **Copiar evidência**; testes aprovados não recebem BDD.
+
+- `DADO`/`E` só descrevem entrada, autenticação, limite, tipo, ausência ou precondição comprovados por request/contrato.
+- `QUANDO` usa método e endpoint da request principal; uma operação contratual resolvida desempata setup e ação do mesmo método favorecendo a última ação compatível.
+- `ENTÃO` descreve status observado, ausência de resposta, timeout explícito ou erro de conexão confirmado.
+- `MAS` preserva assertion e contrato separadamente e explicita divergências.
+- O último `E` só descreve persistência quando `persistenceEvidence` está confirmado.
+- Linhas sem dados suficientes são omitidas; nenhuma linha atribui causa técnica, responsabilidade ou severidade.
+
+- Implementação: `src/reporter/buildBddScenario.ts`, `src/reporter/buildReportModel.ts`, `src/reporter/evidence.ts`, `src/templates/clientScript.ts`
+- Testes: `test/unit/bdd.test.js`, `test/unit/evidence.test.js`, `test/unit/infer-request.test.js`, `test/integration/generate-html.test.js`, `test/integration/security.test.js`
+
 ## Relatório HTML
 
 O HTML deve abrir offline e não pode usar CDN, scripts externos, fontes remotas, `fetch` ou importação dinâmica externa. Dados, fonte, CSS e JavaScript ficam embutidos.
@@ -132,7 +146,7 @@ O HTML deve abrir offline e não pode usar CDN, scripts externos, fontes remotas
 
 ## Evidência para o dev
 
-O toolbar de detalhe possui, nesta ordem, `Chamada selecionada`, `Script de reprodução` e `Evidência para o dev`, com semântica ARIA e navegação por setas/Home/End. A evidência textual usa somente dados já sanitizados e o cURL da request principal.
+O toolbar de detalhe possui, nesta ordem, `Chamada selecionada`, `Script de reprodução` e `Evidência para o dev`, com semântica ARIA e navegação por setas/Home/End. A evidência textual usa somente dados já sanitizados, o BDD determinístico quando disponível e o cURL da request principal.
 
 O evento oficial `after:screenshot` registra metadata; a associação exige spec e título completo ou a janela temporal de uma tentativa. Imagens automáticas de falha vencem manuais e a tentativa falha mais recente aparece primeiro. Ausência, remoção posterior do arquivo e `screenshotOnRunFailure: false` não quebram o relatório.
 

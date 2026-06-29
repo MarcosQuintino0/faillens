@@ -7,6 +7,7 @@ export interface EvidenceContent {
   expected: string;
   actual: string;
   curl: string;
+  bdd?: string;
   screenshot?: Pick<FailLensScreenshot, "relativePath" | "href">;
 }
 
@@ -63,6 +64,9 @@ export function sanitizeEvidence(value: FailLensEvidence | undefined): FailLensE
 
 export function buildEvidenceText(input: EvidenceContent): string {
   const oneLine = (value: unknown): string => String(value ?? "").replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, " ").trim();
+  const bdd = typeof input.bdd === "string"
+    ? input.bdd.split(/\r?\n/).map(oneLine).filter(Boolean).join("\n")
+    : "";
   return [
     "Evidência FailLens",
     "",
@@ -71,6 +75,7 @@ export function buildEvidenceText(input: EvidenceContent): string {
     `Falha: ${oneLine(input.failure)}`,
     `Esperado: ${oneLine(input.expected)}`,
     `Recebido: ${oneLine(input.actual)}`,
+    ...(bdd ? ["", "Cenário BDD:", bdd] : []),
     "",
     "cURL:",
     String(input.curl || "Não disponível"),
@@ -90,8 +95,11 @@ export function buildEvidenceHtml(input: EvidenceContent, imageDataUrl?: string)
   const screenshot = input.screenshot
     ? `<a href="${escape(input.screenshot.href)}">${escape(input.screenshot.relativePath)}</a>`
     : "Não disponível";
+  const bdd = typeof input.bdd === "string" && input.bdd.trim()
+    ? `<h2>Cenário BDD</h2><pre>${escape(input.bdd)}</pre>`
+    : "";
   return `<article><h1>Evidência FailLens</h1><p><strong>Teste:</strong> ${escape(input.title)}<br>`
     + `<strong>Spec:</strong> ${escape(input.specPath)}<br><strong>Falha:</strong> ${escape(input.failure)}<br>`
     + `<strong>Esperado:</strong> ${escape(input.expected)}<br><strong>Recebido:</strong> ${escape(input.actual)}</p>`
-    + `<h2>cURL</h2><pre>${escape(input.curl || "Não disponível")}</pre><p><strong>Screenshot:</strong> ${screenshot}</p>${safeImage}</article>`;
+    + `${bdd}<h2>cURL</h2><pre>${escape(input.curl || "Não disponível")}</pre><p><strong>Screenshot:</strong> ${screenshot}</p>${safeImage}</article>`;
 }

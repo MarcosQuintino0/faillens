@@ -134,11 +134,22 @@ A resolução do módulo de tags (`CatalogoTags.X` → `@valor`) é feita em `sr
 
 **inferMainRequest — casos críticos:**
 - Sem requests → `undefined`
-- Status recebido igual ao `actual` do erro é o sinal de maior prioridade
+- Operação de regra resolvida é o sinal de maior prioridade; quando setup e ação usam o mesmo método, a última chamada compatível vence
+- Sem operação contratual, status recebido igual ao `actual` do erro é o sinal de maior prioridade
 - Mutações (`POST`, `PUT`, `PATCH`, `DELETE`) vencem métodos sem mutação quando não há sinal de status
 - Empate preserva a chamada mais antiga
 - Login/auth não recebe tratamento especial; endpoint e idioma não influenciam
 - Múltiplos POSTs → escolhe o que tem status matching o erro
+
+## src/reporter/buildBddScenario.ts
+
+**Responsabilidade:** gera BDD para testes falhos por templates determinísticos, com quatro a seis linhas quando houver fontes suficientes e procedência por linha
+
+| Contrato | Arquivo |
+|---|---|
+| Campo ausente obrigatório, conflito de fontes, duplicidade comprovada, timeout, autenticação, rede, persistência e teste aprovado | `test/unit/bdd.test.js` |
+| Seleção da ação por `operation=` | `test/unit/infer-request.test.js` |
+| Escape de conteúdo não confiável no HTML | `test/integration/security.test.js` |
 
 **annotateRequests — fases:**
 - `mainRequestId` → `"validacao"`
@@ -327,6 +338,7 @@ Se a instrumentação ganhar um contrato que `test/cli-run.test.js` não consiga
 - Seção `diff-line` presente para assertions com expected/actual
 - Sequência de chamadas renderizada (`request-row`, `sequence-legend`)
 - Resumo de persistência aparece somente para `confirmed-*` na comparação existente; não existe seção “Evidência de persistência”
+- Cenário BDD aparece somente na aba de evidência dos testes falhos e é incluído no conteúdo copiado
 
 **Contrato visual (não regredir a aparência) — `visual-styling.test.js`:**
 - Paleta de verde unificada: `--green-line` nos dois temas, `--green-soft` em `rgba(34,197,94,.13)`, sem o órfão `rgba(53,209,126)`
@@ -375,7 +387,7 @@ Se a instrumentação ganhar um contrato que `test/cli-run.test.js` não consiga
 
 | Contrato | Arquivo |
 |---|---|
-| Texto/HTML determinísticos, escaping e clipboard rico/fallback | `test/unit/evidence.test.js` |
+| Texto/HTML/BDD determinísticos, escaping e clipboard rico/fallback | `test/unit/evidence.test.js` |
 | Terceira aba, ARIA, link, estado vazio, CSP e ausência de bytes | `test/integration/generate-html.test.js` |
 | Rejeição de schemes/traversal/path absoluto | `test/integration/security.test.js` |
 

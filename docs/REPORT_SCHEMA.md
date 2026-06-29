@@ -45,6 +45,13 @@ Campos enriquecidos:
 - `facts`: procedência (interno; não renderizado no HTML). Ver "Procedência".
 - `persistenceExpectation`: expectativa contratual tipada (`required`, `forbidden`, `preserve`, `remove` ou `not-specified`).
 - `persistenceEvidence`: efeito comprovado pela sequência (`confirmed-created`, `confirmed-absent`, `confirmed-preserved`, `confirmed-removed` ou `not-verified`) e IDs das requests usadas como prova.
+- `bddScenario`: cenário determinístico opcional, gerado somente para teste falho e usado na evidência para o desenvolvedor.
+
+### Cenário BDD (`bddScenario`)
+
+`bddScenario.text` contém o Gherkin pronto para exibição/cópia. `lines` preserva a forma auditável: cada item possui `keyword` (`DADO`, `E`, `QUANDO`, `ENTÃO` ou `MAS`), `text` e uma lista não vazia de `sources`. Cada source contém `kind` (`request`, `assertion`, `contract`, `error` ou `persistence`) e um `id` rastreável no teste/contrato.
+
+O cenário é produzido por templates fixos, sem IA generativa. Linhas sem evidência são omitidas; normalmente há entre quatro e seis linhas. A operação usa o endpoint do contrato somente quando existe uma única rota contratual compatível com o método principal; caso contrário usa a URL observada sanitizada. Conflitos entre assertion e contrato são escritos explicitamente. Consequências de persistência aparecem somente para `confirmed-*`. Testes aprovados e estados `not-verified` não geram BDD/conclusão posterior.
 
 ### Procedência (`facts` e `contracts`)
 

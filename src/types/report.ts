@@ -152,6 +152,25 @@ export interface FailLensEvidence {
   screenshots?: FailLensScreenshot[];
 }
 
+export type FailLensBddKeyword = "DADO" | "E" | "QUANDO" | "ENTÃO" | "MAS";
+export type FailLensBddSourceKind = "request" | "assertion" | "contract" | "error" | "persistence";
+
+export interface FailLensBddSource {
+  kind: FailLensBddSourceKind;
+  id: string;
+}
+
+export interface FailLensBddLine {
+  keyword: FailLensBddKeyword;
+  text: string;
+  sources: FailLensBddSource[];
+}
+
+export interface FailLensBddScenario {
+  lines: FailLensBddLine[];
+  text: string;
+}
+
 export interface FailLensTest {
   id: string;
   title: string;
@@ -167,6 +186,8 @@ export interface FailLensTest {
   statusExpectation?: FailLensStatusExpectation;
   payloadDiff?: FailLensPayloadDiffMarker[];
   evidence?: FailLensEvidence;
+  // Cenário determinístico para chamados. Gerado somente para testes falhos.
+  bddScenario?: FailLensBddScenario;
   // Procedência (interno; não renderizado no HTML).
   contractId?: string;
   ruleRefs?: FailLensRuleRef[];
