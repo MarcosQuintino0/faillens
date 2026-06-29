@@ -101,6 +101,24 @@ O histórico de redirects exposto pelo Cypress é normalizado e preservado. Cada
 - Implementação: `src/cypress/support/autoCapture.ts`, `src/collector/requestStore.ts`
 - Testes: `test/core.test.js`, `test/integration/build-report.test.js`
 
+## Procedência determinística
+
+Cada informação que o FailLens poderá usar em BDD, resultado atual, resultado esperado ou chamado carrega uma fonte rastreável (`observed`, `asserted`, `contract`, `verified`, `not-verified`). O relatório não inventa causa, não escolhe silenciosamente entre fontes conflitantes, não trata assertion como contrato nem afirma persistência apenas porque recebeu um ID.
+
+- O contrato JSDoc estruturado (`@contrato`/`@campo`/`@regra` com ID e atributos `chave=valor`) é parseado de forma determinística; atributos inválidos viram avisos e não derrubam o relatório; o formato antigo degrada sem vincular regra específica.
+- O vínculo teste→regra vem da tag `@regra:<id>` lida estaticamente do source (inclusive data-driven sobre array literal), nunca de comparação de palavras do título.
+- As demais tags do `it` são preservadas em `test.tags`: operacionais e de catálogo escritas como string (ex.: `@bug`) direto; tags de catálogo escritas como `CatalogoTags.X` são resolvidas ao valor real lendo o módulo de tags importado (determinístico, sem derivar do nome da constante) e degradam silenciosamente se o módulo não for legível.
+- A resolução contrato→regra→teste é cross-spec e contextual: primeiro usa o contrato cujo source está na mesma pasta do spec; sem contexto inequívoco, um id só resolve quando exatamente um contrato o declara.
+- Definições divergentes da mesma regra em specs do mesmo contrato geram aviso e tornam o vínculo ambíguo.
+- Conflito entre `asserted` e `contract` aparece como divergência de fontes (`conflictsWith`), não como diagnóstico do backend.
+- Um GET 2xx posterior só produz `verified` quando usa uma variável gerada pela mutação ou consulta um identificador retornado por ela; caso contrário, a persistência permanece `not-verified`.
+- Títulos curtos duplicados no mesmo spec não recebem vínculo estático até que a associação seja inequívoca.
+
+`facts` e `contracts` são internos (persistidos no JSON, ausentes do HTML) e mascarados antes da primeira persistência. `sourceFiles` usa o caminho relativo do spec, nunca `spec.absolute`.
+
+- Implementação: `src/collector/parseContractJsdoc.ts`, `src/collector/extractTestTags.ts` (`parseCatalogModule`/`findImportSource`), `src/cypress/registerNodeEvents.ts` (`resolveCatalogTags`), `src/reporter/provenance/resolveContracts.ts`, `src/reporter/provenance/buildFacts.ts`, `src/reporter/buildReportModel.ts`
+- Testes: `test/unit/parse-contract-jsdoc.test.js`, `test/unit/extract-test-tags.test.js`, `test/integration/provenance.test.js`
+
 ## Relatório HTML
 
 O HTML deve abrir offline e não pode usar CDN, scripts externos, fontes remotas, `fetch` ou importação dinâmica externa. Dados, fonte, CSS e JavaScript ficam embutidos.

@@ -95,6 +95,32 @@
 
 ---
 
+## src/collector/parseContractJsdoc.ts
+
+**Responsabilidade:** parser determinístico do contrato JSDoc (`@contrato/@api/@campo/@regra/@permissao/@cobertura`), incluindo aspas escapadas e avisos para valores malformados, zero deps
+
+| Testes | Arquivo |
+|--------|---------|
+| Gramática, atributos, status inválido, duplicidade, formato antigo | `test/unit/parse-contract-jsdoc.test.js` |
+
+## src/collector/extractTestTags.ts
+
+**Responsabilidade:** captura estática das tags do `it` — vínculo `@regra:<id>`, tags operacionais/catálogo string (`@bug`) e referências `CatalogoTags.X`; mais `parseCatalogModule`/`findImportSource` para resolver o valor do catálogo lendo o módulo importado
+
+| Testes | Arquivo |
+|--------|---------|
+| it simples, data-driven, comentário/string, it.only/skip, 3 categorias juntas, resolução de catálogo | `test/unit/extract-test-tags.test.js` |
+
+A resolução do módulo de tags (`CatalogoTags.X` → `@valor`) é feita em `src/cypress/registerNodeEvents.ts` (`resolveCatalogTags`, lê o módulo importado pelo spec) e persistida por `RequestStore.mergeTestTags` em `test.tags`.
+
+## src/reporter/provenance/ (resolveContracts.ts, buildFacts.ts)
+
+**Responsabilidade:** resolução contextual cross-spec contrato→regra→teste, detecção de definições divergentes e montagem dos facts com conflito de fontes e verificação correlacionada de persistência
+
+| Testes | Arquivo |
+|--------|---------|
+| Vínculo cross-spec, facts por fonte, conflito, regra inexistente, ambiguidade, masking | `test/integration/provenance.test.js` |
+
 ## src/reporter/buildReportModel.ts (+ inferMainRequest, annotateRequests, buildReproductionScript)
 
 **Responsabilidade:** constrói FailLensReport completo a partir de specs brutos

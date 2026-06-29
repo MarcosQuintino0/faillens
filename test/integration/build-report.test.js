@@ -322,6 +322,7 @@ test("assertion de body não contamina a expectativa de status HTTP", () => {
   });
   const result = buildReportModel([makeSpec("falhas.cy.js", [test_])]).specs[0].tests[0];
   assert.deepEqual(result.statusExpectation, {
+    source: "asserted",
     type: "set",
     label: "4xx/5xx",
     values: [400, 500],

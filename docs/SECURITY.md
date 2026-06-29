@@ -14,7 +14,7 @@ Os principais riscos considerados são:
 
 ## Regra central
 
-Dados devem ser mascarados antes da primeira persistência. O `RequestStore` mascara requests, responses, redirects, erros e assertions na entrada. `buildReportModel` aplica nova sanitização antes de gerar os artefatos finais.
+Dados devem ser mascarados antes da primeira persistência. O `RequestStore` mascara requests, responses, redirects, erros, assertions e contratos JSDoc na entrada. `buildReportModel` aplica nova sanitização antes de gerar os artefatos finais. A procedência contratual persiste somente paths relativos de specs.
 
 Nunca mova a única barreira de sanitização para `generateJson` ou `generateHtml`: nesse ponto, parciais anteriores já poderiam ter sido gravados.
 
@@ -25,6 +25,7 @@ Nunca mova a única barreira de sanitização para `generateJson` ou `generateHt
 - Query strings e locations de redirect.
 - Mensagens e stacks de erro.
 - Assertions, expected e actual.
+- Facts de procedência e mensagens de contrato (`rule-message`).
 - Comandos cURL e scripts de reprodução.
 - Resultados parciais em `.faillens/results/`.
 - JSON e HTML finais.

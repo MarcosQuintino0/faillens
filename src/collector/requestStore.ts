@@ -12,6 +12,8 @@ import { maskSensitiveData, maskSensitiveText, maskUrl } from "./sensitiveMask";
 import { parseAssertionError } from "../reporter/diagnostics/parseAssertionError";
 import { asRecord, clampNumber, createId } from "../utils/format";
 import type { PlannedTestAssertions } from "./extractSourceAssertions";
+import type { PlannedTestTags } from "./extractTestTags";
+import type { FailLensContract, FailLensRuleRef } from "../types/report";
 
 export interface SetTestPayload {
   id?: string;
@@ -287,6 +289,46 @@ export class RequestStore {
         } = assertion;
         return publicAssertion;
       });
+    }
+  }
+
+  // Anexa o contrato JSDoc bruto ao spec. A consolidação por @contrato e a
+  // resolução de regras acontecem em buildReportModel (visão de todos os specs).
+  mergeContract(specPath: string, contract: FailLensContract | undefined): void {
+    if (contract) {
+      this.getSpec(specPath).contract = maskSensitiveData(contract, this.maskFields) as FailLensContract;
+    }
+  }
+
+  // Liga cada teste às suas tags: vínculo @regra:<id> (ruleRefs, resolvido depois
+  // no reporter) e tags de catálogo/operacionais (tags), na ordem do source.
+  mergeTestTags(specPath: string, plannedTags: PlannedTestTags[]): void {
+    const spec = this.getSpec(specPath);
+    for (const planned of plannedTags) {
+      if (!planned.ruleRefs.length && !planned.tags.length) continue;
+      const matches = spec.tests.filter((item) => sameTitle(item, planned.title));
+      if (matches.length !== 1) continue;
+      const test = matches[0];
+      if (planned.ruleRefs.length) {
+        const refs: FailLensRuleRef[] = [];
+        const seen = new Set<string>();
+        for (const ruleId of planned.ruleRefs) {
+          if (seen.has(ruleId)) continue;
+          seen.add(ruleId);
+          refs.push({ ruleId, resolved: false });
+        }
+        test.ruleRefs = refs;
+      }
+      if (planned.tags.length) {
+        const seen = new Set<string>();
+        const tags: string[] = [];
+        for (const tag of planned.tags) {
+          if (seen.has(tag)) continue;
+          seen.add(tag);
+          tags.push(tag);
+        }
+        test.tags = tags;
+      }
     }
   }
 

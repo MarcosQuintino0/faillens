@@ -261,6 +261,7 @@ O código TypeScript fica em `src/`, e o build CommonJS com declarações fica e
 
 ### Documentação para contribuidores e agentes
 
+- [Ecossistema: agents + testes + FailLens](docs/ECOSYSTEM.md) ← comece aqui para entender a visão
 - [Arquitetura](docs/ARCHITECTURE.md)
 - [Contratos de comportamento](docs/BEHAVIORS.md)
 - [Estratégia de testes](docs/TESTING.md)

@@ -15,6 +15,36 @@ import { diagnoseFailure } from "./diagnostics/diagnoseFailure";
 import { parseAssertionError } from "./diagnostics/parseAssertionError";
 import { buildPayloadDiff } from "./buildPayloadDiff";
 import { sanitizeEvidence } from "./evidence";
+import { buildFacts } from "./provenance/buildFacts";
+import { contractIdForSpec, resolveContracts, resolveRuleRef, type ResolvedContracts } from "./provenance/resolveContracts";
+import type { FailLensContract, FailLensRuleRef } from "../types/report";
+
+// Mascara mensagens e textos do contrato antes de persistir (mask-before-persistence).
+function sanitizeContract(contract: FailLensContract, maskFields: string[]): FailLensContract {
+  const maskAttributes = (attributes: Record<string, string | number | boolean>) => {
+    const out: Record<string, string | number | boolean> = {};
+    for (const [key, value] of Object.entries(attributes)) {
+      out[key] = typeof value === "string" ? maskSensitiveText(value, maskFields) : value;
+    }
+    return out;
+  };
+  return {
+    ...contract,
+    resumo: contract.resumo ? maskSensitiveText(contract.resumo, maskFields) : contract.resumo,
+    fields: contract.fields.map((field) => ({
+      ...field,
+      attributes: maskAttributes(field.attributes),
+      raw: maskSensitiveText(field.raw, maskFields),
+    })),
+    rules: contract.rules.map((rule) => ({
+      ...rule,
+      message: rule.message ? maskSensitiveText(rule.message, maskFields) : rule.message,
+      attributes: maskAttributes(rule.attributes),
+      raw: maskSensitiveText(rule.raw, maskFields),
+    })),
+    permissao: contract.permissao ? maskAttributes(contract.permissao) : contract.permissao,
+  };
+}
 
 const VERSION = "0.1.0";
 
@@ -417,17 +447,21 @@ function resolveStatusExpectation(
   test: FailLensTest,
   main: FailLensRequest | undefined,
 ): FailLensStatusExpectation | undefined {
-  let expectation = test.statusExpectation ? { ...test.statusExpectation } : undefined;
+  let expectation = test.statusExpectation
+    ? { source: "asserted" as const, ...test.statusExpectation }
+    : undefined;
   if (!expectation) {
     const statusAssertion = test.assertions?.find((assertion) => assertion.target === "status");
     const expected = numeric(statusAssertion?.expected);
-    if (expected !== undefined) expectation = { type: "exact", label: String(expected), expected };
+    if (expected !== undefined) {
+      expectation = { type: "exact", label: String(expected), expected, source: "asserted" };
+    }
   }
   if (!expectation) {
     const expected = numeric(test.error?.expected);
     const actual = numeric(test.error?.actual);
     if (expected !== undefined && actual !== undefined) {
-      expectation = { type: "exact", label: String(expected), expected };
+      expectation = { type: "exact", label: String(expected), expected, source: "asserted" };
     }
   }
   if (!expectation) return undefined;
@@ -442,7 +476,12 @@ function resolveStatusExpectation(
   return { ...expectation, actual, matched };
 }
 
-function prepareTest(source: FailLensTest, maskFields: string[]): FailLensTest {
+function prepareTest(
+  source: FailLensTest,
+  maskFields: string[],
+  ruleIndex?: ResolvedContracts["ruleIndex"],
+  contextContractId?: string,
+): FailLensTest {
   const test: FailLensTest = {
     ...source,
     title: source.titlePath?.length
@@ -458,6 +497,35 @@ function prepareTest(source: FailLensTest, maskFields: string[]): FailLensTest {
   test.mainRequestId = main?.id;
   annotateRequests(test, main, chain);
   test.statusExpectation = resolveStatusExpectation(test, main);
+
+  // Procedência: resolve o vínculo teste->regra e monta os facts.
+  const resolvedRefs: FailLensRuleRef[] = (source.ruleRefs || []).map((ref) =>
+    ruleIndex ? resolveRuleRef(ref, ruleIndex, contextContractId) : { ...ref, resolved: false },
+  );
+  if (resolvedRefs.length) {
+    // Persistimos um vínculo enxuto; os detalhes da regra ficam em report.contracts
+    // (mascarado). Evita duplicar e re-vazar a mensagem da regra por teste.
+    test.ruleRefs = resolvedRefs.map(({ rule: _rule, ...rest }) => rest);
+    test.contractId = resolvedRefs.find((ref) => ref.resolved)?.contractId;
+  }
+  // Sem expectativa asserida, mas com regra contratual de status: a expectativa
+  // passa a vir do contrato (fonte rastreável), nunca inventada.
+  if (!test.statusExpectation) {
+    const rule = resolvedRefs.find((ref) => ref.resolved && ref.rule?.status !== undefined)?.rule;
+    if (rule?.status !== undefined) {
+      const actual = main?.receivedStatus;
+      test.statusExpectation = {
+        type: "exact",
+        label: String(rule.status),
+        expected: rule.status,
+        source: "contract",
+        ...(actual !== undefined ? { actual, matched: actual === rule.status } : {}),
+      };
+    }
+  }
+  const facts = buildFacts(test, main, resolvedRefs, maskFields);
+  if (facts.length) test.facts = facts;
+
   test.payloadDiff = buildPayloadDiff(test.assertions, main?.responseBody, test.state === "failed");
   test.diagnosis = diagnoseFailure({ test, mainRequest: main });
   test.reproductionScript = test.state === "failed" && test.requests.length
@@ -476,8 +544,10 @@ export function buildReportModel(
   options: BuildReportOptions = {},
 ): FailLensReport {
   const maskFields = options.config?.maskFields ?? [];
+  const resolved = resolveContracts(inputSpecs);
   const specs = inputSpecs.map((spec) => {
-    const tests = spec.tests.map((test) => prepareTest(test, maskFields));
+    const contextContractId = contractIdForSpec(spec.specPath, resolved.contracts);
+    const tests = spec.tests.map((test) => prepareTest(test, maskFields, resolved.ruleIndex, contextContractId));
     return {
       specPath: spec.specPath,
       durationMs: spec.durationMs || tests.reduce((sum, test) => sum + test.durationMs, 0),
@@ -508,5 +578,8 @@ export function buildReportModel(
       passRate: total ? round((passed / total) * 100, 1) : 0,
     },
     specs,
+    ...(resolved.contracts.length
+      ? { contracts: resolved.contracts.map((contract) => sanitizeContract(contract, maskFields)) }
+      : {}),
   };
 }

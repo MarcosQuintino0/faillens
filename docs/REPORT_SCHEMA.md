@@ -12,6 +12,7 @@ A fonte de verdade de tipos é `src/types/report.ts`. Este documento registra a 
 | `theme` | não | Tema de apresentação (`dark` ou `light`) |
 | `summary` | sim | Contadores e duração agregados |
 | `specs` | sim | Specs e seus testes |
+| `contracts` | não | Contratos JSDoc resolvidos (procedência); ausente quando não há contrato |
 
 ## `FailLensSummary`
 
@@ -38,6 +39,32 @@ Campos enriquecidos:
 - `diagnosis`: classificação determinística da falha.
 - `reproductionScript`: reprodução gerada para teste falho.
 - `evidence`: campo opcional com metadata de screenshots relacionados ao teste.
+- `contractId`: contrato vinculado ao teste por `@regra:<id>`, quando resolvido.
+- `ruleRefs`: vínculos teste→regra declarados nas tags, com `resolved` indicando se a regra existe no contrato.
+- `tags`: tags de catálogo e operacionais autoradas no 2º argumento do `it` (ex.: `@obrigatoriedade`, `@bug`), na ordem do source. O vínculo `@regra:<id>` não entra aqui (vive em `ruleRefs`). Tags de catálogo via `CatalogoTags.X` aparecem resolvidas a valor quando o módulo de tags importado pôde ser lido.
+- `facts`: procedência (interno; não renderizado no HTML). Ver "Procedência".
+
+### Procedência (`facts` e `contracts`)
+
+`facts` é o modelo interno de procedência. Cada fato carrega `source` em
+`observed | asserted | contract | verified | not-verified`, um `kind` (ex.:
+`received-status`, `expected-status`, `rule-status`, `rule-message`,
+`request-field-absent`, `persistence-verified`, `persistence-not-verified`) e
+referências opcionais (`requestId`, `contractId`, `ruleId`). Quando `asserted` e
+`contract` divergem na mesma `dimension`, os fatos envolvidos listam `conflictsWith`
+e ambos são preservados — o relatório nunca escolhe silenciosamente uma fonte.
+
+`statusExpectation.source` registra se a expectativa veio de assertion (`asserted`)
+ou de regra contratual (`contract`).
+
+`contracts` (raiz) lista os contratos JSDoc resolvidos: `id`, `api`, `fields`,
+`rules` (com `id`, `status`, `message`, `attributes`), `cobertura`, `legacy` e
+`warnings` de parse. Esse modelo é interno e mascarado antes da persistência; o
+usuário final verá texto natural, não o JSON de procedência.
+
+Contratos repetidos com o mesmo ID são consolidados somente quando suas definições coincidem. Regras ou campos divergentes geram `conflicting-rule`/`conflicting-field`; uma regra conflitante não resolve o vínculo do teste. `sourceFiles` contém paths relativos normalizados com `/`. `persistence-verified` exige correlação observável entre a mutação e a consulta posterior; um GET 2xx sem essa correlação produz `persistence-not-verified`.
+
+`ruleRefs` é resolvido primeiro dentro do contrato associado ao diretório do spec. Isso permite que APIs diferentes reutilizem IDs legíveis, como `descricao-obrigatoria`. Quando o diretório não identifica exatamente um contrato, a resolução global só ocorre se houver uma única candidata.
 
 ### `FailLensScreenshot`
 

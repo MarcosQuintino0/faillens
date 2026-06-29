@@ -1,3 +1,12 @@
+import type {
+  FactSource,
+  FailLensContract,
+  FailLensContractRule,
+  FailLensFact,
+} from "./provenance";
+
+export type { FailLensContract, FailLensFact } from "./provenance";
+
 export type RequestPhase =
   | "preparacao"
   | "validacao"
@@ -20,6 +29,19 @@ export interface FailLensStatusExpectation {
   max?: number;
   actual?: number;
   matched?: boolean;
+  // Fonte da expectativa: "asserted" quando veio de uma assertion/erro,
+  // "contract" quando veio de uma regra contratual vinculada.
+  source?: FactSource;
+}
+
+// Vínculo determinístico teste -> regra contratual, derivado da tag @regra:<id>
+// (sem heurística textual de título). `resolved` indica se a regra existe no
+// contrato vinculado.
+export interface FailLensRuleRef {
+  ruleId: string;
+  contractId?: string;
+  resolved: boolean;
+  rule?: FailLensContractRule;
 }
 
 export interface FailLensPayloadDiffMarker {
@@ -135,12 +157,24 @@ export interface FailLensTest {
   statusExpectation?: FailLensStatusExpectation;
   payloadDiff?: FailLensPayloadDiffMarker[];
   evidence?: FailLensEvidence;
+  // Procedência (interno; não renderizado no HTML).
+  contractId?: string;
+  ruleRefs?: FailLensRuleRef[];
+  facts?: FailLensFact[];
+  // Tags de catálogo e operacionais autoradas no 2º argumento do it (ex.:
+  // "@obrigatoriedade", "@bug"), na ordem do source. O vínculo @regra:<id> NÃO
+  // entra aqui (vive em ruleRefs). Tags de catálogo via CatalogoTags.X só
+  // aparecem quando o módulo de tags importado pôde ser resolvido.
+  tags?: string[];
 }
 
 export interface FailLensSpec {
   specPath: string;
   durationMs: number;
   tests: FailLensTest[];
+  // Contrato JSDoc bruto deste spec (procedência). Consolidado no relatório por
+  // @contrato em buildReportModel; não é emitido por spec no relatório final.
+  contract?: FailLensContract;
 }
 
 export interface FailLensSummary {
@@ -168,4 +202,6 @@ export interface FailLensReport {
   theme?: "dark" | "light";
   summary: FailLensSummary;
   specs: FailLensSpec[];
+  // Contratos JSDoc resolvidos (procedência). Ausente quando não há contrato.
+  contracts?: FailLensContract[];
 }

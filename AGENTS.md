@@ -54,10 +54,15 @@ src/collector/
   sensitiveMask.ts          → mascara dados sensíveis recursivamente (headers, bodies, URLs)
   curlGenerator.ts          → gera cURL sanitizado a partir de uma request capturada
   extractSourceAssertions.ts → parse estático do source do teste para extrair plano de assertions
+  extractTestTags.ts        → captura estática do vínculo teste→regra (@regra:<id>), inclusive data-driven
+  parseContractJsdoc.ts     → parser determinístico do contrato JSDoc (procedência), zero deps
 
 src/reporter/
-  buildReportModel.ts       → constrói FailLensReport a partir de specs brutos
+  buildReportModel.ts       → constrói FailLensReport a partir de specs brutos; resolve contratos e facts
   buildPayloadDiff.ts       → marca divergências de payload apoiadas pelas assertions
+  provenance/
+    resolveContracts.ts     → consolida contratos por @contrato e resolve teste→regra (cross-spec)
+    buildFacts.ts           → monta facts (observed/asserted/contract/verified/not-verified) + conflitos
   generateHtml.ts           → escreve o arquivo HTML standalone
   generateJson.ts           → escreve o arquivo JSON do relatório
   diagnostics/
@@ -72,8 +77,9 @@ src/templates/
   clientScript.ts    → JavaScript do relatório interativo
 
 src/types/
-  config.ts   → FailLensConfig, ResolvedFailLensConfig
-  report.ts   → todos os tipos do relatório (FailLensReport, FailLensTest, etc.)
+  config.ts     → FailLensConfig, ResolvedFailLensConfig
+  report.ts     → todos os tipos do relatório (FailLensReport, FailLensTest, etc.)
+  provenance.ts → modelo de procedência (FactSource, FailLensFact, FailLensContract, FailLensContractRule)
 
 src/utils/
   format.ts   → round(), asRecord(), plain()

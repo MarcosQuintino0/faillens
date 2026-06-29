@@ -9,6 +9,13 @@ import type { FailLensReport, FailLensSpec } from "../types/report";
 import { ensureDir, pathExists, readJsonFile, writeJsonFile } from "../utils/fs";
 import { extractSourceAssertions } from "../collector/extractSourceAssertions";
 import {
+  extractTestTags,
+  findImportSource,
+  parseCatalogModule,
+  type PlannedTestTags,
+} from "../collector/extractTestTags";
+import { parseContractJsdoc } from "../collector/parseContractJsdoc";
+import {
   associateScreenshots,
   captureScreenshotMetadata,
   type CapturedScreenshot,
@@ -23,6 +30,47 @@ export interface RegisterNodeEventsOptions {
 }
 
 type CypressOn = (event: string, handler: unknown) => void;
+
+// Resolve as tags de catálogo (CatalogoTags.X) lendo o módulo de tags importado
+// pelo spec e mapeando constante -> valor real declarado. Determinístico e
+// degradável: se o módulo não for encontrado/parseável, as tags de catálogo
+// simplesmente não resolvem (as tags string como "@bug" já foram capturadas).
+async function resolveCatalogTags(
+  planned: PlannedTestTags[],
+  source: string,
+  specFile: string,
+): Promise<void> {
+  const objects = new Set<string>();
+  for (const test of planned) for (const ref of test.catalogRefs) objects.add(ref.object);
+  if (!objects.size) return;
+
+  const maps = new Map<string, Map<string, string>>();
+  for (const object of objects) {
+    const importPath = findImportSource(source, object);
+    if (!importPath || !importPath.startsWith(".")) continue;
+    const base = path.resolve(path.dirname(specFile), importPath);
+    const candidates = [base, `${base}.js`, `${base}.ts`, path.join(base, "index.js")];
+    for (const candidate of candidates) {
+      try {
+        const moduleSource = await fs.readFile(candidate, "utf8");
+        const parsed = parseCatalogModule(moduleSource);
+        if (parsed.size) {
+          maps.set(object, parsed);
+          break;
+        }
+      } catch {
+        // tenta o próximo candidato
+      }
+    }
+  }
+
+  for (const test of planned) {
+    for (const ref of test.catalogRefs) {
+      const value = maps.get(ref.object)?.get(ref.name);
+      if (value && !test.tags.includes(value)) test.tags.unshift(value);
+    }
+  }
+}
 
 function resultFileName(specPath: string): string {
   let hash = 5381;
@@ -112,6 +160,10 @@ export function registerNodeEvents(
     try {
       const source = await fs.readFile(specFile, "utf8");
       store.mergeSourceAssertions(partial.specPath, extractSourceAssertions(source, specFile));
+      const planned = extractTestTags(source);
+      await resolveCatalogTags(planned, source, specFile);
+      store.mergeTestTags(partial.specPath, planned);
+      store.mergeContract(partial.specPath, parseContractJsdoc(source, partial.specPath));
     } catch {
       // O relatório continua válido quando o spec não está disponível para leitura estática.
     }

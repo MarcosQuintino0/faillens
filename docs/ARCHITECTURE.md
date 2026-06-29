@@ -59,10 +59,13 @@ O browser não acessa diretamente o filesystem Node. `cy.task` é a fronteira en
 - Mascara dados sensíveis antes de armazená-los.
 - Gera comandos cURL sanitizados.
 - Extrai estaticamente o plano de assertions do source do spec.
+- Extrai estaticamente o contrato JSDoc (`parseContractJsdoc.ts`) e o vínculo teste→regra `@regra:<id>` (`extractTestTags.ts`).
 
 ### Relatório (`src/reporter`, `src/templates`)
 
-- `buildReportModel.ts`: sanitiza novamente e enriquece o modelo.
+- `buildReportModel.ts`: sanitiza novamente e enriquece o modelo, resolve contratos e monta os facts de procedência.
+- `provenance/resolveContracts.ts`: consolida contratos por `@contrato` e resolve o vínculo teste→regra (cross-spec).
+- `provenance/buildFacts.ts`: monta os facts (`observed/asserted/contract/verified/not-verified`) e marca conflitos entre fontes.
 - `buildPayloadDiff.ts`: identifica evidências de divergência no payload.
 - `diagnostics/`: classifica falhas por regras determinísticas.
 - `generateJson.ts`: grava o contrato de dados.
