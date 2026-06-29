@@ -145,3 +145,28 @@ test("parseContractJsdoc — aspas não fechadas geram aviso sem perder atributo
   assert.equal(contract.rules[0].status, 400);
   assert.ok(contract.warnings.some((w) => w.code === "invalid-quoted-value"));
 });
+
+test("parseContractJsdoc — persistence válida vira expectativa tipada", () => {
+  const src = `/**
+ * @contrato x
+ * @regra criar operation=POST status=201 persistence=required
+ * @regra rejeitar operation=POST status=400 persistence=forbidden
+ * @regra manter operation=PUT status=400 persistence=preserve
+ * @regra excluir operation=DELETE status=204 persistence=remove
+ */`;
+  const contract = parseContractJsdoc(src, FILE);
+  assert.deepEqual(contract.rules.map((item) => item.persistence), [
+    "required", "forbidden", "preserve", "remove",
+  ]);
+});
+
+test("parseContractJsdoc — persistence inválida fica apenas no raw e gera aviso", () => {
+  const src = `/**
+ * @contrato x
+ * @regra criar operation=POST status=201 persistence=talvez
+ */`;
+  const contract = parseContractJsdoc(src, FILE);
+  assert.equal(contract.rules[0].persistence, undefined);
+  assert.equal(contract.rules[0].attributes.persistence, "talvez");
+  assert.ok(contract.warnings.some((item) => item.code === "invalid-persistence"));
+});

@@ -18,6 +18,35 @@ export type FactSource =
   | "verified"
   | "not-verified";
 
+export type PersistenceExpectation =
+  | "required"
+  | "forbidden"
+  | "preserve"
+  | "remove"
+  | "not-specified";
+
+export type PersistenceEvidenceState =
+  | "confirmed-created"
+  | "confirmed-absent"
+  | "confirmed-preserved"
+  | "confirmed-removed"
+  | "not-verified";
+
+export interface FailLensPersistenceExpectation {
+  state: PersistenceExpectation;
+  contractId?: string;
+  ruleId?: string;
+}
+
+export interface FailLensPersistenceEvidence {
+  state: PersistenceEvidenceState;
+  mutationRequestId: string;
+  verificationRequestId?: string;
+  baselineRequestId?: string;
+  // Texto determinístico só existe para estados confirmados.
+  summary?: string;
+}
+
 export interface FailLensFact {
   // Identificador estável dentro do teste, usado para apontar conflitos.
   id: string;
@@ -53,6 +82,7 @@ export interface FailLensContractRule {
   attributes: Record<string, string | number | boolean>;
   status?: number;
   message?: string;
+  persistence?: PersistenceExpectation;
   raw: string;
 }
 

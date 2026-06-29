@@ -422,9 +422,11 @@ export const clientScript = String.raw`
     var compTitle = passed ? 'Resposta validada' : 'Esperado vs. recebido';
     var matchNote = passed ? '<span class="match-note">Esperado e recebido são idênticos — contrato satisfeito.</span>' : '';
     var receivedClass = passed ? 'received passed' : 'received failed';
+    var persistenceSummary = test.persistenceEvidence && test.persistenceEvidence.summary;
     var comparison = '<section class="comparison-section"><h3>' + compTitle + matchNote + '</h3><div class="comparison-grid">' +
       '<div class="comparison-card"><div class="comparison-head">Esperado <span class="status-token">' + e(expected) + '</span>' + expandButton() + '</div>' + highlightedJson(expectedBody, test, false) + '</div>' +
-      '<div class="comparison-card ' + receivedClass + '"><div class="comparison-head">Recebido <span class="status-token">' + e(actual) + '</span>' + expandButton() + '</div>' + highlightedJson(receivedPayload, test, !passed) + '</div></div></section>';
+      '<div class="comparison-card ' + receivedClass + '"><div class="comparison-head">Recebido <span class="status-token">' + e(actual) + '</span>' + expandButton() + '</div>' + highlightedJson(receivedPayload, test, !passed) + '</div></div>' +
+      (persistenceSummary ? '<p class="match-note">' + e(persistenceSummary) + '</p>' : '') + '</section>';
 
     var gridClass = passed ? 'analysis-grid pass-layout' : 'analysis-grid';
     var reasonClass = passed ? 'section-card failure-reason result-strip' : 'section-card failure-reason';

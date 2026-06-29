@@ -83,6 +83,8 @@ test("HTML contém elemento faillens-data com JSON embutido", async () => {
   const { html } = await buildAndGenerate([makeSpec([makeTest("t1")])]);
   assert.match(html, /faillens-data/);
   assert.match(html, /application\/json/);
+  assert.doesNotMatch(html, /Evidência de persistência/i);
+  assert.match(html, /test\.persistenceEvidence && test\.persistenceEvidence\.summary/);
 });
 
 test("JSON embutido é válido e contém os dados do relatório", async () => {

@@ -65,7 +65,7 @@ O browser não acessa diretamente o filesystem Node. `cy.task` é a fronteira en
 
 - `buildReportModel.ts`: sanitiza novamente e enriquece o modelo, resolve contratos e monta os facts de procedência.
 - `provenance/resolveContracts.ts`: consolida contratos por `@contrato` e resolve o vínculo teste→regra (cross-spec).
-- `provenance/buildFacts.ts`: monta os facts (`observed/asserted/contract/verified/not-verified`) e marca conflitos entre fontes.
+- `provenance/buildFacts.ts`: monta os facts, separa expectativa contratual de evidência observada de persistência e marca conflitos entre fontes.
 - `buildPayloadDiff.ts`: identifica evidências de divergência no payload.
 - `diagnostics/`: classifica falhas por regras determinísticas.
 - `generateJson.ts`: grava o contrato de dados.

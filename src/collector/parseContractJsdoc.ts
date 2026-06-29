@@ -12,9 +12,14 @@ import type {
   FailLensContract,
   FailLensContractField,
   FailLensContractRule,
+  PersistenceExpectation,
 } from "../types/provenance";
 
 type AttrValue = string | number | boolean;
+
+const PERSISTENCE_EXPECTATIONS = new Set<PersistenceExpectation>([
+  "required", "forbidden", "preserve", "remove", "not-specified",
+]);
 
 // Divide uma linha em tokens separados por espaço, mantendo trechos entre aspas
 // duplas intactos (mensagens com espaços e Unicode permanecem em um único token).
@@ -164,7 +169,18 @@ function parseRule(
       });
   }
   const message = typeof attributes.message === "string" ? attributes.message : undefined;
-  return { id, attributes, status, message, raw: rest.trim() };
+  let persistence: PersistenceExpectation | undefined;
+  if (attributes.persistence !== undefined) {
+    const value = String(attributes.persistence) as PersistenceExpectation;
+    if (PERSISTENCE_EXPECTATIONS.has(value)) persistence = value;
+    else warnings.push({
+      code: "invalid-persistence",
+      tag: "@regra",
+      ruleId: id,
+      message: `Persistência inválida em "${id}": ${String(attributes.persistence)}.`,
+    });
+  }
+  return { id, attributes, status, message, persistence, raw: rest.trim() };
 }
 
 export function parseContractJsdoc(source: string, file: string): FailLensContract | undefined {

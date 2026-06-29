@@ -15,7 +15,7 @@ import { diagnoseFailure } from "./diagnostics/diagnoseFailure";
 import { parseAssertionError } from "./diagnostics/parseAssertionError";
 import { buildPayloadDiff } from "./buildPayloadDiff";
 import { sanitizeEvidence } from "./evidence";
-import { buildFacts } from "./provenance/buildFacts";
+import { buildFacts, buildPersistenceState } from "./provenance/buildFacts";
 import { contractIdForSpec, resolveContracts, resolveRuleRef, type ResolvedContracts } from "./provenance/resolveContracts";
 import type { FailLensContract, FailLensRuleRef } from "../types/report";
 
@@ -482,8 +482,9 @@ function prepareTest(
   ruleIndex?: ResolvedContracts["ruleIndex"],
   contextContractId?: string,
 ): FailLensTest {
+  const { persistenceExpectation: _sourceExpectation, persistenceEvidence: _sourceEvidence, ...safeSource } = source;
   const test: FailLensTest = {
-    ...source,
+    ...safeSource,
     title: source.titlePath?.length
       ? source.titlePath[source.titlePath.length - 1]
       : source.title,
@@ -523,7 +524,12 @@ function prepareTest(
       };
     }
   }
-  const facts = buildFacts(test, main, resolvedRefs, maskFields);
+  const persistence = buildPersistenceState(test, main, resolvedRefs);
+  if (persistence) {
+    test.persistenceExpectation = persistence.expectation;
+    test.persistenceEvidence = persistence.evidence;
+  }
+  const facts = buildFacts(test, main, resolvedRefs, maskFields, persistence);
   if (facts.length) test.facts = facts;
 
   test.payloadDiff = buildPayloadDiff(test.assertions, main?.responseBody, test.state === "failed");

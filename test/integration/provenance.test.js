@@ -170,7 +170,7 @@ test("procedência — id de regra ambíguo (dois contratos) não resolve", () =
   assert.equal(t.ruleRefs[0].resolved, false);
 });
 
-test("procedência — GET 2xx não relacionado não comprova persistência", () => {
+test("persistência — GET 2xx não relacionado mantém evidência como not-verified", () => {
   const source = failingTest([], {
     requests: [
       ...failingTest([]).requests,
@@ -183,24 +183,189 @@ test("procedência — GET 2xx não relacionado não comprova persistência", ()
     ],
   });
   const report = buildReportModel([specWithTest(source)]);
-  assert.equal(report.specs[0].tests[0].facts.some((f) => f.kind === "persistence-verified"), false);
-  assert.equal(report.specs[0].tests[0].facts.some((f) => f.kind === "persistence-not-verified"), true);
+  const result = report.specs[0].tests[0];
+  assert.equal(result.persistenceExpectation.state, "not-specified");
+  assert.deepEqual(result.persistenceEvidence, {
+    state: "not-verified",
+    mutationRequestId: "req-1",
+  });
 });
 
-test("procedência — GET do id retornado comprova que a consulta encontrou o recurso", () => {
+test("persistência — POST 2xx + GET correlacionado e payload compatível confirma criação", () => {
+  const createRule = rule({
+    id: "criar",
+    attributes: { operation: "POST" },
+    status: 201,
+    persistence: "required",
+  });
+  const source = failingTest([{ ruleId: "criar", resolved: false }], {
+    state: "passed",
+    error: undefined,
+    statusExpectation: { type: "exact", label: "201", expected: 201 },
+    requests: [
+      ...failingTest([]).requests,
+      {
+        id: "req-2", order: 2, phase: "chamada", method: "GET",
+        url: "http://localhost/alegacao_ans/1842", requestHeaders: {}, requestBody: null,
+        responseHeaders: {}, responseBody: { id: 1842, codigo: 42, ativo: true }, receivedStatus: 200,
+        durationMs: 1, curl: "curl ...",
+      },
+    ],
+  });
+  const report = buildReportModel([specWithContract([createRule]), specWithTest(source)]);
+  const result = report.specs.find((item) => item.specPath === "validacoes.cy.js").tests[0];
+  assert.deepEqual(result.persistenceExpectation, {
+    state: "required", contractId: "alegacao-ans", ruleId: "criar",
+  });
+  assert.deepEqual(result.persistenceEvidence, {
+    state: "confirmed-created", mutationRequestId: "req-1", verificationRequestId: "req-2",
+    summary: "Uma consulta posterior encontrou o recurso criado com os dados enviados.",
+  });
+  assert.equal(result.facts.find((item) => item.kind === "persistence-evidence").source, "verified");
+});
+
+test("persistência — ID na resposta sem consulta posterior não comprova criação", () => {
+  const createRule = rule({ id: "criar", persistence: "required" });
+  const source = failingTest([{ ruleId: "criar", resolved: false }]);
+  const report = buildReportModel([specWithContract([createRule]), specWithTest(source)]);
+  const result = report.specs.find((item) => item.specPath === "validacoes.cy.js").tests[0];
+  assert.equal(result.persistenceEvidence.state, "not-verified");
+});
+
+test("persistência — estado fornecido na entrada não substitui evidência calculada", () => {
+  const source = failingTest([], {
+    persistenceExpectation: { state: "required", ruleId: "forjada" },
+    persistenceEvidence: { state: "confirmed-created", mutationRequestId: "req-1", verificationRequestId: "inexistente" },
+  });
+  const result = buildReportModel([specWithTest(source)]).specs[0].tests[0];
+  assert.deepEqual(result.persistenceExpectation, { state: "not-specified" });
+  assert.deepEqual(result.persistenceEvidence, { state: "not-verified", mutationRequestId: "req-1" });
+});
+
+test("persistência — GET correlacionado com payload divergente não comprova criação", () => {
   const source = failingTest([], {
     requests: [
       ...failingTest([]).requests,
       {
         id: "req-2", order: 2, phase: "chamada", method: "GET",
         url: "http://localhost/alegacao_ans/1842", requestHeaders: {}, requestBody: null,
-        responseHeaders: {}, responseBody: { id: 1842 }, receivedStatus: 200,
+        responseHeaders: {}, responseBody: { id: 1842, codigo: 99, ativo: true }, receivedStatus: 200,
         durationMs: 1, curl: "curl ...",
       },
     ],
   });
-  const report = buildReportModel([specWithTest(source)]);
-  assert.equal(report.specs[0].tests[0].facts.some((f) => f.kind === "persistence-verified"), true);
+  const result = buildReportModel([specWithTest(source)]).specs[0].tests[0];
+  assert.equal(result.persistenceEvidence.state, "not-verified");
+});
+
+test("persistência — POST rejeitado + GET 404 do mesmo recurso confirma ausência", () => {
+  const rejectRule = rule({ id: "rejeitar", status: 400, persistence: "forbidden" });
+  const source = failingTest([{ ruleId: "rejeitar", resolved: false }], {
+    error: { name: "AssertionError", message: "expected 400 to equal 201", expected: 201, actual: 400 },
+    requests: [
+      { ...failingTest([]).requests[0], url: "http://localhost/alegacao_ans/1842", receivedStatus: 400, responseBody: {} },
+      {
+        id: "req-2", order: 2, phase: "chamada", method: "GET",
+        url: "http://localhost/alegacao_ans/1842", requestHeaders: {}, requestBody: null,
+        responseHeaders: {}, responseBody: {}, receivedStatus: 404,
+        durationMs: 1, curl: "curl ...",
+      },
+    ],
+  });
+  const report = buildReportModel([specWithContract([rejectRule]), specWithTest(source)]);
+  const result = report.specs.find((item) => item.specPath === "validacoes.cy.js").tests[0];
+  assert.equal(result.persistenceExpectation.state, "forbidden");
+  assert.deepEqual(result.persistenceEvidence, {
+    state: "confirmed-absent", mutationRequestId: "req-1", verificationRequestId: "req-2",
+    summary: "Uma consulta posterior confirmou a ausência do recurso.",
+  });
+});
+
+test("persistência — PUT rejeitado + releitura idêntica confirma preservação", () => {
+  const preserveRule = rule({ id: "manter", attributes: { operation: "PUT" }, status: 400, persistence: "preserve" });
+  const original = { id: 10, nome: "Original" };
+  const source = failingTest([{ ruleId: "manter", resolved: false }], {
+    error: { name: "AssertionError", message: "expected 400 to equal 200", expected: 200, actual: 400 },
+    requests: [
+      { id: "req-0", order: 1, phase: "chamada", method: "GET", url: "http://localhost/recursos/10",
+        requestHeaders: {}, requestBody: null, responseHeaders: {}, responseBody: original,
+        receivedStatus: 200, durationMs: 1, curl: "curl ..." },
+      { id: "req-1", order: 2, phase: "chamada", method: "PUT", url: "http://localhost/recursos/10",
+        requestHeaders: {}, requestBody: { nome: "Alterado" }, responseHeaders: {}, responseBody: {},
+        receivedStatus: 400, durationMs: 1, curl: "curl ..." },
+      { id: "req-2", order: 3, phase: "chamada", method: "GET", url: "http://localhost/recursos/10",
+        requestHeaders: {}, requestBody: null, responseHeaders: {}, responseBody: { ...original },
+        receivedStatus: 200, durationMs: 1, curl: "curl ..." },
+    ],
+  });
+  const report = buildReportModel([specWithContract([preserveRule]), specWithTest(source)]);
+  const result = report.specs.find((item) => item.specPath === "validacoes.cy.js").tests[0];
+  assert.deepEqual(result.persistenceEvidence, {
+    state: "confirmed-preserved", mutationRequestId: "req-1",
+    baselineRequestId: "req-0", verificationRequestId: "req-2",
+    summary: "A releitura posterior encontrou o mesmo estado observado antes da operação rejeitada.",
+  });
+});
+
+test("persistência — PUT rejeitado com estado posterior diferente não confirma preservação", () => {
+  const preserveRule = rule({ id: "manter", attributes: { operation: "PUT" }, status: 400, persistence: "preserve" });
+  const source = failingTest([{ ruleId: "manter", resolved: false }], {
+    error: { name: "AssertionError", message: "expected 400 to equal 200", expected: 200, actual: 400 },
+    requests: [
+      { id: "req-0", order: 1, phase: "chamada", method: "GET", url: "http://localhost/recursos/10",
+        requestHeaders: {}, requestBody: null, responseHeaders: {}, responseBody: { id: 10, nome: "Original" },
+        receivedStatus: 200, durationMs: 1, curl: "curl ..." },
+      { id: "req-1", order: 2, phase: "chamada", method: "PUT", url: "http://localhost/recursos/10",
+        requestHeaders: {}, requestBody: { nome: "Alterado" }, responseHeaders: {}, responseBody: {},
+        receivedStatus: 400, durationMs: 1, curl: "curl ..." },
+      { id: "req-2", order: 3, phase: "chamada", method: "GET", url: "http://localhost/recursos/10",
+        requestHeaders: {}, requestBody: null, responseHeaders: {}, responseBody: { id: 10, nome: "Alterado" },
+        receivedStatus: 200, durationMs: 1, curl: "curl ..." },
+    ],
+  });
+  const report = buildReportModel([specWithContract([preserveRule]), specWithTest(source)]);
+  const result = report.specs.find((item) => item.specPath === "validacoes.cy.js").tests[0];
+  assert.equal(result.persistenceEvidence.state, "not-verified");
+});
+
+test("persistência — DELETE + GET 404 correlacionado confirma remoção", () => {
+  const removeRule = rule({ id: "excluir", attributes: { operation: "DELETE" }, status: 204, persistence: "remove" });
+  const source = failingTest([{ ruleId: "excluir", resolved: false }], {
+    state: "passed", error: undefined,
+    requests: [
+      { id: "req-setup", order: 1, phase: "chamada", method: "POST", url: "http://localhost/recursos",
+        requestHeaders: {}, requestBody: { nome: "Temporário" }, responseHeaders: {}, responseBody: { id: 10 },
+        receivedStatus: 201, durationMs: 1, curl: "curl ..." },
+      { id: "req-1", order: 2, phase: "chamada", method: "DELETE", url: "http://localhost/recursos/10",
+        requestHeaders: {}, requestBody: null, responseHeaders: {}, responseBody: null,
+        receivedStatus: 204, durationMs: 1, curl: "curl ..." },
+      { id: "req-2", order: 3, phase: "chamada", method: "GET", url: "http://localhost/recursos/10",
+        requestHeaders: {}, requestBody: null, responseHeaders: {}, responseBody: {},
+        receivedStatus: 404, durationMs: 1, curl: "curl ..." },
+    ],
+  });
+  const report = buildReportModel([specWithContract([removeRule]), specWithTest(source)]);
+  const result = report.specs.find((item) => item.specPath === "validacoes.cy.js").tests[0];
+  assert.equal(result.persistenceExpectation.state, "remove");
+  assert.equal(result.persistenceEvidence.state, "confirmed-removed");
+  assert.equal(result.persistenceEvidence.mutationRequestId, "req-1");
+});
+
+test("persistência — POST duplicado + GET 200 do original permanece inconclusivo", () => {
+  const duplicateRule = rule({ id: "codigo-duplicado", status: 409, persistence: "forbidden" });
+  const source = failingTest([{ ruleId: "codigo-duplicado", resolved: false }], {
+    error: { name: "AssertionError", message: "expected 409 to equal 201", expected: 201, actual: 409 },
+    requests: [
+      { ...failingTest([]).requests[0], receivedStatus: 409, responseBody: {} },
+      { id: "req-2", order: 2, phase: "chamada", method: "GET", url: "http://localhost/alegacao_ans/42",
+        requestHeaders: {}, requestBody: null, responseHeaders: {}, responseBody: { id: 7, codigo: 42 },
+        receivedStatus: 200, durationMs: 1, curl: "curl ..." },
+    ],
+  });
+  const report = buildReportModel([specWithContract([duplicateRule]), specWithTest(source)]);
+  const result = report.specs.find((item) => item.specPath === "validacoes.cy.js").tests[0];
+  assert.equal(result.persistenceExpectation.state, "forbidden");
+  assert.equal(result.persistenceEvidence.state, "not-verified");
 });
 
 test("procedência — definições divergentes da mesma regra não resolvem silenciosamente", () => {

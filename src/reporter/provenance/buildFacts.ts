@@ -8,7 +8,11 @@
 // vez de escolher silenciosamente um valor.
 
 import { maskSensitiveText } from "../../collector/sensitiveMask";
-import type { FailLensFact } from "../../types/provenance";
+import type {
+  FailLensFact,
+  FailLensPersistenceEvidence,
+  FailLensPersistenceExpectation,
+} from "../../types/provenance";
 import type { FailLensRequest, FailLensRuleRef, FailLensTest } from "../../types/report";
 
 function numeric(value: unknown): number | undefined {
@@ -46,11 +50,175 @@ function verifiesMutation(mutation: FailLensRequest, request: FailLensRequest): 
   });
 }
 
+function successful(request: FailLensRequest): boolean {
+  return typeof request.receivedStatus === "number"
+    && request.receivedStatus >= 200
+    && request.receivedStatus < 300;
+}
+
+function rejected(request: FailLensRequest): boolean {
+  return typeof request.receivedStatus === "number" && request.receivedStatus >= 400;
+}
+
+function resourceUrl(url: string): string {
+  try {
+    const parsed = new URL(url, "http://faillens.invalid");
+    const pathname = parsed.pathname.length > 1 ? parsed.pathname.replace(/\/+$/, "") : parsed.pathname;
+    return `${pathname}${parsed.search}`;
+  } catch {
+    return url.replace(/\/+$/, "");
+  }
+}
+
+function sameResource(mutation: FailLensRequest, request: FailLensRequest): boolean {
+  return resourceUrl(mutation.url) === resourceUrl(request.url) || verifiesMutation(mutation, request);
+}
+
+function payloadMatches(expected: unknown, observed: unknown): { matches: boolean; compared: boolean } {
+  if (typeof expected === "string" && ["***", "<TOKEN>", "Bearer <TOKEN>"].includes(expected)) {
+    return { matches: false, compared: false };
+  }
+  if (expected === null || typeof expected !== "object") {
+    return { matches: Object.is(expected, observed), compared: true };
+  }
+  if (Array.isArray(expected)) {
+    if (!Array.isArray(observed) || expected.length !== observed.length) return { matches: false, compared: true };
+    let compared = false;
+    for (let index = 0; index < expected.length; index += 1) {
+      const result = payloadMatches(expected[index], observed[index]);
+      if (!result.matches) return result;
+      compared ||= result.compared;
+    }
+    return { matches: true, compared };
+  }
+  if (!observed || typeof observed !== "object" || Array.isArray(observed)) return { matches: false, compared: true };
+  let compared = false;
+  for (const [key, value] of Object.entries(expected as Record<string, unknown>)) {
+    if (!Object.prototype.hasOwnProperty.call(observed, key)) return { matches: false, compared: true };
+    const result = payloadMatches(value, (observed as Record<string, unknown>)[key]);
+    if (!result.matches) return result;
+    compared ||= result.compared;
+  }
+  return { matches: true, compared };
+}
+
+export interface PersistenceState {
+  expectation: FailLensPersistenceExpectation;
+  evidence: FailLensPersistenceEvidence;
+}
+
+export function buildPersistenceState(
+  test: FailLensTest,
+  mainRequest: FailLensRequest | undefined,
+  ruleRefs: FailLensRuleRef[],
+): PersistenceState | undefined {
+  const declaredOperations = new Set(ruleRefs
+    .filter((ref) => ref.resolved && typeof ref.rule?.attributes.operation === "string")
+    .map((ref) => String(ref.rule?.attributes.operation).toUpperCase()));
+  const operationMatches = declaredOperations.size === 1
+    ? test.requests.filter((request) => isMutation(request.method) && declaredOperations.has(request.method))
+    : [];
+  const mutation = operationMatches.length === 1
+    ? operationMatches[0]
+    : mainRequest && isMutation(mainRequest.method)
+    ? mainRequest
+    : test.requests.find((request) => isMutation(request.method));
+  if (!mutation) return undefined;
+
+  const declared = ruleRefs.filter((ref) => ref.resolved && ref.rule?.persistence);
+  const distinct = new Set(declared.map((ref) => ref.rule?.persistence));
+  const resolved = distinct.size === 1 ? declared[0] : undefined;
+  const expectation: FailLensPersistenceExpectation = resolved?.rule?.persistence
+    ? { state: resolved.rule.persistence, contractId: resolved.contractId, ruleId: resolved.rule.id }
+    : { state: "not-specified" };
+  const unverified: PersistenceState = {
+    expectation,
+    evidence: { state: "not-verified", mutationRequestId: mutation.id },
+  };
+  const mutationIndex = test.requests.indexOf(mutation);
+  const before = test.requests.slice(0, mutationIndex);
+  const after = test.requests.slice(mutationIndex + 1);
+
+  if (mutation.method === "POST" && successful(mutation)) {
+    const verification = after.find((request) => {
+      if (request.method !== "GET" || !successful(request) || !verifiesMutation(mutation, request)) return false;
+      const payload = payloadMatches(mutation.requestBody, request.responseBody);
+      return payload.matches && payload.compared;
+    });
+    return verification ? {
+      expectation,
+      evidence: {
+        state: "confirmed-created",
+        mutationRequestId: mutation.id,
+        verificationRequestId: verification.id,
+        summary: "Uma consulta posterior encontrou o recurso criado com os dados enviados.",
+      },
+    } : unverified;
+  }
+
+  if (mutation.method === "POST" && rejected(mutation)) {
+    const verification = after.find((request) =>
+      request.method === "GET" && request.receivedStatus === 404 && sameResource(mutation, request));
+    return verification ? {
+      expectation,
+      evidence: {
+        state: "confirmed-absent",
+        mutationRequestId: mutation.id,
+        verificationRequestId: verification.id,
+        summary: "Uma consulta posterior confirmou a ausência do recurso.",
+      },
+    } : unverified;
+  }
+
+  if (["PUT", "PATCH"].includes(mutation.method) && rejected(mutation)) {
+    let baseline: FailLensRequest | undefined;
+    for (let index = before.length - 1; index >= 0; index -= 1) {
+      const request = before[index];
+      if (request.method === "GET" && successful(request) && sameResource(mutation, request)) {
+        baseline = request;
+        break;
+      }
+    }
+    const verification = after.find((request) => request.method === "GET" && successful(request) && sameResource(mutation, request));
+    if (baseline && verification && payloadMatches(baseline.responseBody, verification.responseBody).matches
+      && payloadMatches(verification.responseBody, baseline.responseBody).matches) {
+      return {
+        expectation,
+        evidence: {
+          state: "confirmed-preserved",
+          mutationRequestId: mutation.id,
+          baselineRequestId: baseline.id,
+          verificationRequestId: verification.id,
+          summary: "A releitura posterior encontrou o mesmo estado observado antes da operação rejeitada.",
+        },
+      };
+    }
+    return unverified;
+  }
+
+  if (mutation.method === "DELETE" && successful(mutation)) {
+    const verification = after.find((request) =>
+      request.method === "GET" && request.receivedStatus === 404 && sameResource(mutation, request));
+    return verification ? {
+      expectation,
+      evidence: {
+        state: "confirmed-removed",
+        mutationRequestId: mutation.id,
+        verificationRequestId: verification.id,
+        summary: "Uma consulta posterior confirmou que o recurso removido não foi encontrado.",
+      },
+    } : unverified;
+  }
+
+  return unverified;
+}
+
 export function buildFacts(
   test: FailLensTest,
   mainRequest: FailLensRequest | undefined,
   ruleRefs: FailLensRuleRef[],
   maskFields: string[],
+  persistence?: PersistenceState,
 ): FailLensFact[] {
   const facts: FailLensFact[] = [];
   let counter = 0;
@@ -105,6 +273,17 @@ export function buildFacts(
         ruleId: rule.id,
       });
     }
+    if (rule.persistence) {
+      facts.push({
+        id: nextId(),
+        kind: "persistence-expectation",
+        value: rule.persistence,
+        source: "contract",
+        dimension: "persistence-expectation",
+        contractId: ref.contractId,
+        ruleId: rule.id,
+      });
+    }
     const field = rule.attributes.field;
     if (typeof field === "string") {
       // observed: o campo exigido pela regra está ausente no request principal?
@@ -128,30 +307,14 @@ export function buildFacts(
     }
   }
 
-  // verified / not-verified: persistência confirmada por operação posterior.
-  const mutation = mainRequest && isMutation(mainRequest.method)
-    ? mainRequest
-    : test.requests.find((request) => isMutation(request.method));
-  if (mutation) {
-    const verification = test.requests.find(
-      (request) =>
-        request.phase === "verificacao" &&
-        typeof request.receivedStatus === "number" &&
-        request.receivedStatus >= 200 &&
-        request.receivedStatus < 300 &&
-        verifiesMutation(mutation, request),
-    );
-    if (verification) {
-      facts.push({
-        id: nextId(),
-        kind: "persistence-verified",
-        value: true,
-        source: "verified",
-        requestId: verification.id,
-      });
-    } else {
-      facts.push({ id: nextId(), kind: "persistence-not-verified", value: true, source: "not-verified" });
-    }
+  if (persistence) {
+    facts.push({
+      id: nextId(),
+      kind: "persistence-evidence",
+      value: persistence.evidence.state,
+      source: persistence.evidence.state === "not-verified" ? "not-verified" : "verified",
+      requestId: persistence.evidence.verificationRequestId || persistence.evidence.mutationRequestId,
+    });
   }
 
   markConflicts(facts);

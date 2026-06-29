@@ -3,9 +3,19 @@ import type {
   FailLensContract,
   FailLensContractRule,
   FailLensFact,
+  FailLensPersistenceEvidence,
+  FailLensPersistenceExpectation,
 } from "./provenance";
 
-export type { FailLensContract, FailLensFact } from "./provenance";
+export type {
+  FactSource,
+  FailLensContract,
+  FailLensFact,
+  FailLensPersistenceEvidence,
+  FailLensPersistenceExpectation,
+  PersistenceEvidenceState,
+  PersistenceExpectation,
+} from "./provenance";
 
 export type RequestPhase =
   | "preparacao"
@@ -161,6 +171,9 @@ export interface FailLensTest {
   contractId?: string;
   ruleRefs?: FailLensRuleRef[];
   facts?: FailLensFact[];
+  // Expectativa contratual e evidência observada são deliberadamente separadas.
+  persistenceExpectation?: FailLensPersistenceExpectation;
+  persistenceEvidence?: FailLensPersistenceEvidence;
   // Tags de catálogo e operacionais autoradas no 2º argumento do it (ex.:
   // "@obrigatoriedade", "@bug"), na ordem do source. O vínculo @regra:<id> NÃO
   // entra aqui (vive em ruleRefs). Tags de catálogo via CatalogoTags.X só

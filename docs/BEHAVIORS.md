@@ -111,10 +111,14 @@ Cada informação que o FailLens poderá usar em BDD, resultado atual, resultado
 - A resolução contrato→regra→teste é cross-spec e contextual: primeiro usa o contrato cujo source está na mesma pasta do spec; sem contexto inequívoco, um id só resolve quando exatamente um contrato o declara.
 - Definições divergentes da mesma regra em specs do mesmo contrato geram aviso e tornam o vínculo ambíguo.
 - Conflito entre `asserted` e `contract` aparece como divergência de fontes (`conflictsWith`), não como diagnóstico do backend.
-- Um GET 2xx posterior só produz `verified` quando usa uma variável gerada pela mutação ou consulta um identificador retornado por ela; caso contrário, a persistência permanece `not-verified`.
+- A expectativa de persistência vem exclusivamente do atributo tipado `persistence` da regra JSDoc vinculada; a evidência observada é calculada separadamente da sequência capturada.
+- POST 2xx só confirma criação quando um GET posterior está correlacionado ao ID/variável retornada e contém os dados enviados. ID sem GET ou payload divergente permanece `not-verified`.
+- POST rejeitado + GET 404 do mesmo recurso confirma ausência; PUT/PATCH rejeitado exige leitura anterior e posterior idênticas; DELETE 2xx exige GET 404 posterior do mesmo recurso.
+- POST duplicado + GET 200 do registro original não prova unicidade e permanece `not-verified`.
+- Somente estados `confirmed-*` geram uma frase determinística na comparação existente; `not-verified` bloqueia afirmações positivas e negativas e não representa falha de persistência.
 - Títulos curtos duplicados no mesmo spec não recebem vínculo estático até que a associação seja inequívoca.
 
-`facts` e `contracts` são internos (persistidos no JSON, ausentes do HTML) e mascarados antes da primeira persistência. `sourceFiles` usa o caminho relativo do spec, nunca `spec.absolute`.
+`facts`, `contracts`, `persistenceExpectation` e `persistenceEvidence` são persistidos no JSON e mascarados antes da primeira persistência. Não existe uma seção HTML chamada “Evidência de persistência”. `sourceFiles` usa o caminho relativo do spec, nunca `spec.absolute`.
 
 - Implementação: `src/collector/parseContractJsdoc.ts`, `src/collector/extractTestTags.ts` (`parseCatalogModule`/`findImportSource`), `src/cypress/registerNodeEvents.ts` (`resolveCatalogTags`), `src/reporter/provenance/resolveContracts.ts`, `src/reporter/provenance/buildFacts.ts`, `src/reporter/buildReportModel.ts`
 - Testes: `test/unit/parse-contract-jsdoc.test.js`, `test/unit/extract-test-tags.test.js`, `test/integration/provenance.test.js`

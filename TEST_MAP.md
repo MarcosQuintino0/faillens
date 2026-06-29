@@ -97,11 +97,11 @@
 
 ## src/collector/parseContractJsdoc.ts
 
-**Responsabilidade:** parser determinístico do contrato JSDoc (`@contrato/@api/@campo/@regra/@permissao/@cobertura`), incluindo aspas escapadas e avisos para valores malformados, zero deps
+**Responsabilidade:** parser determinístico do contrato JSDoc (`@contrato/@api/@campo/@regra/@permissao/@cobertura`), incluindo expectativa tipada `persistence`, aspas escapadas e avisos para valores malformados, zero deps
 
 | Testes | Arquivo |
 |--------|---------|
-| Gramática, atributos, status inválido, duplicidade, formato antigo | `test/unit/parse-contract-jsdoc.test.js` |
+| Gramática, atributos, status/persistence inválidos, duplicidade, formato antigo | `test/unit/parse-contract-jsdoc.test.js` |
 
 ## src/collector/extractTestTags.ts
 
@@ -115,11 +115,12 @@ A resolução do módulo de tags (`CatalogoTags.X` → `@valor`) é feita em `sr
 
 ## src/reporter/provenance/ (resolveContracts.ts, buildFacts.ts)
 
-**Responsabilidade:** resolução contextual cross-spec contrato→regra→teste, detecção de definições divergentes e montagem dos facts com conflito de fontes e verificação correlacionada de persistência
+**Responsabilidade:** resolução contextual cross-spec contrato→regra→teste, detecção de definições divergentes, montagem dos facts e cálculo separado de expectativa/evidência de persistência
 
 | Testes | Arquivo |
 |--------|---------|
-| Vínculo cross-spec, facts por fonte, conflito, regra inexistente, ambiguidade, masking | `test/integration/provenance.test.js` |
+| Vínculo cross-spec, facts por fonte, conflito, regra inexistente, ambiguidade e masking | `test/integration/provenance.test.js` |
+| Persistência: criação, ausência, preservação, remoção, payload divergente, duplicidade inconclusiva e `not-verified` | `test/integration/provenance.test.js` |
 
 ## src/reporter/buildReportModel.ts (+ inferMainRequest, annotateRequests, buildReproductionScript)
 
@@ -325,6 +326,7 @@ Se a instrumentação ganhar um contrato que `test/cli-run.test.js` não consiga
 - `data-detail-tab="script"` presente
 - Seção `diff-line` presente para assertions com expected/actual
 - Sequência de chamadas renderizada (`request-row`, `sequence-legend`)
+- Resumo de persistência aparece somente para `confirmed-*` na comparação existente; não existe seção “Evidência de persistência”
 
 **Contrato visual (não regredir a aparência) — `visual-styling.test.js`:**
 - Paleta de verde unificada: `--green-line` nos dois temas, `--green-soft` em `rgba(34,197,94,.13)`, sem o órfão `rgba(53,209,126)`

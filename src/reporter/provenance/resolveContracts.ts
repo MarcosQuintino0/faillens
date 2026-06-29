@@ -20,7 +20,8 @@ function mergeContract(target: FailLensContract, incoming: FailLensContract): vo
   for (const rule of incoming.rules) {
     const existing = target.rules.find((item) => item.id === rule.id);
     if (!existing) target.rules.push(rule);
-    else if (existing.status !== rule.status || existing.message !== rule.message || comparable(existing.attributes) !== comparable(rule.attributes)) {
+    else if (existing.status !== rule.status || existing.message !== rule.message
+      || existing.persistence !== rule.persistence || comparable(existing.attributes) !== comparable(rule.attributes)) {
       target.rules.push(rule);
       target.warnings.push({ code: "conflicting-rule", tag: "@regra", ruleId: rule.id, message: `Definições conflitantes para a regra "${rule.id}".` });
     }

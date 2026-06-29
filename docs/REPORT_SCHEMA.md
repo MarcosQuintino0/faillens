@@ -43,13 +43,15 @@ Campos enriquecidos:
 - `ruleRefs`: vínculos teste→regra declarados nas tags, com `resolved` indicando se a regra existe no contrato.
 - `tags`: tags de catálogo e operacionais autoradas no 2º argumento do `it` (ex.: `@obrigatoriedade`, `@bug`), na ordem do source. O vínculo `@regra:<id>` não entra aqui (vive em `ruleRefs`). Tags de catálogo via `CatalogoTags.X` aparecem resolvidas a valor quando o módulo de tags importado pôde ser lido.
 - `facts`: procedência (interno; não renderizado no HTML). Ver "Procedência".
+- `persistenceExpectation`: expectativa contratual tipada (`required`, `forbidden`, `preserve`, `remove` ou `not-specified`).
+- `persistenceEvidence`: efeito comprovado pela sequência (`confirmed-created`, `confirmed-absent`, `confirmed-preserved`, `confirmed-removed` ou `not-verified`) e IDs das requests usadas como prova.
 
 ### Procedência (`facts` e `contracts`)
 
 `facts` é o modelo interno de procedência. Cada fato carrega `source` em
 `observed | asserted | contract | verified | not-verified`, um `kind` (ex.:
 `received-status`, `expected-status`, `rule-status`, `rule-message`,
-`request-field-absent`, `persistence-verified`, `persistence-not-verified`) e
+`request-field-absent`, `persistence-expectation`, `persistence-evidence`) e
 referências opcionais (`requestId`, `contractId`, `ruleId`). Quando `asserted` e
 `contract` divergem na mesma `dimension`, os fatos envolvidos listam `conflictsWith`
 e ambos são preservados — o relatório nunca escolhe silenciosamente uma fonte.
@@ -62,7 +64,19 @@ ou de regra contratual (`contract`).
 `warnings` de parse. Esse modelo é interno e mascarado antes da persistência; o
 usuário final verá texto natural, não o JSON de procedência.
 
-Contratos repetidos com o mesmo ID são consolidados somente quando suas definições coincidem. Regras ou campos divergentes geram `conflicting-rule`/`conflicting-field`; uma regra conflitante não resolve o vínculo do teste. `sourceFiles` contém paths relativos normalizados com `/`. `persistence-verified` exige correlação observável entre a mutação e a consulta posterior; um GET 2xx sem essa correlação produz `persistence-not-verified`.
+Contratos repetidos com o mesmo ID são consolidados somente quando suas definições coincidem. Regras ou campos divergentes geram `conflicting-rule`/`conflicting-field`; uma regra conflitante não resolve o vínculo do teste. `sourceFiles` contém paths relativos normalizados com `/`.
+
+### Estado de persistência
+
+O atributo JSDoc `persistence` declara somente a expectativa da regra. Valores fora do enum geram `invalid-persistence` e não viram expectativa tipada. A evidência é calculada separadamente e nunca é aceita a partir do JSDoc ou de campos fornecidos no modelo de entrada.
+
+- `confirmed-created`: POST 2xx seguido por GET correlacionado ao ID/variável retornada e com os dados enviados presentes na resposta. Um ID sozinho não basta.
+- `confirmed-absent`: POST rejeitado seguido por GET 404 inequivocamente ligado ao mesmo recurso.
+- `confirmed-preserved`: PUT/PATCH rejeitado, com GET anterior e posterior do mesmo recurso e respostas idênticas.
+- `confirmed-removed`: DELETE 2xx seguido por GET 404 do mesmo recurso.
+- `not-verified`: sequência ausente, incompleta, sem correlação ou ambígua. Esse estado impede conclusões; não significa que o efeito ocorreu ou deixou de ocorrer.
+
+Um POST duplicado seguido por GET 200 do registro original permanece `not-verified`, pois essa consulta não prova unicidade nem ausência de uma segunda gravação. A expectativa usa `contractId`/`ruleId`; a evidência usa `mutationRequestId`, `verificationRequestId` e, para preservação, `baselineRequestId`. Somente estados `confirmed-*` recebem `summary`; `not-verified` não gera texto. O HTML apresenta esse resumo na comparação existente e não cria uma seção chamada “Evidência de persistência”.
 
 `ruleRefs` é resolvido primeiro dentro do contrato associado ao diretório do spec. Isso permite que APIs diferentes reutilizem IDs legíveis, como `descricao-obrigatoria`. Quando o diretório não identifica exatamente um contrato, a resolução global só ocorre se houver uma única candidata.
 
