@@ -103,6 +103,29 @@ test("mascaramento com extraFields aplicado", () => {
   assert.equal(body.name, "Ana");
 });
 
+test("mascaramento com maskPatterns remove segredos em texto livre antes de persistir", () => {
+  const test_ = makeFailedTest("t1", {
+    error: {
+      name: "AssertionError",
+      message: "expected recovery-code=ABC-123-SECRET to equal recovery-code=***",
+      expected: "recovery-code=***",
+      actual: "recovery-code=ABC-123-SECRET",
+    },
+  });
+  test_.requests[0].responseBody = {
+    message: "erro com recovery-code=ABC-123-SECRET",
+    detail: "campo genérico",
+  };
+
+  const report = buildReportModel(
+    [makeSpec("spec.cy.js", [test_])],
+    { config: { maskPatterns: ["recovery-code=[A-Z0-9-]+"] } },
+  );
+
+  assert.doesNotMatch(JSON.stringify(report), /ABC-123-SECRET/);
+  assert.match(JSON.stringify(report), /recovery-code=\*\*\*/);
+});
+
 test("titlePath definido — title usa último elemento", () => {
   const report = buildReportModel([makeSpec("spec.cy.js", [makeFailedTest("t1")])]);
   assert.equal(report.specs[0].tests[0].title, "Criar usuário sem e-mail deve retornar 400");

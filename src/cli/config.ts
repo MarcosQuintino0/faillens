@@ -29,6 +29,9 @@ export async function loadFailLensConfig(projectRoot: string): Promise<ResolvedF
   }
   const outputDir = path.resolve(projectRoot, userConfig.outputDir || path.join("reports", "faillens"));
   const maskFields = Array.from(new Set([...DEFAULT_MASK_FIELDS, ...(userConfig.maskFields || [])]));
+  const maskPatterns = Array.from(new Set((userConfig.maskPatterns || []).map((pattern) =>
+    pattern instanceof RegExp ? `/${pattern.source}/${pattern.flags}` : String(pattern),
+  ).filter(Boolean)));
   return {
     outputDir,
     projectName: userConfig.projectName || manifest.name,
@@ -36,6 +39,7 @@ export async function loadFailLensConfig(projectRoot: string): Promise<ResolvedF
     branch: userConfig.branch,
     theme: userConfig.theme === "light" ? "light" : "dark",
     maskFields,
+    maskPatterns,
     cypressConfigFile: userConfig.cypressConfigFile,
   };
 }

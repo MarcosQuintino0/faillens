@@ -7,7 +7,7 @@
 // ambos são preservados e marcados como conflitantes (divergência de fontes), em
 // vez de escolher silenciosamente um valor.
 
-import { maskSensitiveText } from "../../collector/sensitiveMask";
+import { maskSensitiveText, type MaskConfig } from "../../collector/sensitiveMask";
 import type {
   FailLensFact,
   FailLensPersistenceEvidence,
@@ -217,7 +217,7 @@ export function buildFacts(
   test: FailLensTest,
   mainRequest: FailLensRequest | undefined,
   ruleRefs: FailLensRuleRef[],
-  maskFields: string[],
+  maskConfig: MaskConfig,
   persistence?: PersistenceState,
 ): FailLensFact[] {
   const facts: FailLensFact[] = [];
@@ -267,7 +267,7 @@ export function buildFacts(
       facts.push({
         id: nextId(),
         kind: "rule-message",
-        value: maskSensitiveText(rule.message, maskFields),
+        value: maskSensitiveText(rule.message, maskConfig),
         source: "contract",
         contractId: ref.contractId,
         ruleId: rule.id,

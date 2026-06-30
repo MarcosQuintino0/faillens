@@ -1,4 +1,4 @@
-import { maskSensitiveText } from "../../collector/sensitiveMask";
+import { maskSensitiveData, maskSensitiveText, type MaskConfig } from "../../collector/sensitiveMask";
 import type { FailLensError } from "../../types/report";
 
 function parseLiteral(value: string): unknown {
@@ -27,14 +27,14 @@ function sourceLocation(stack?: string): Pick<FailLensError, "file" | "line" | "
 
 export function parseAssertionError(
   input: unknown,
-  maskFields: string[] = [],
+  maskConfig: MaskConfig = [],
 ): FailLensError {
   const raw =
     input && typeof input === "object"
       ? (input as Record<string, unknown>)
       : { message: String(input ?? "Erro desconhecido") };
-  const message = maskSensitiveText(String(raw.message ?? "Erro desconhecido"), maskFields);
-  const stack = raw.stack ? maskSensitiveText(String(raw.stack), maskFields) : undefined;
+  const message = maskSensitiveText(String(raw.message ?? "Erro desconhecido"), maskConfig);
+  const stack = raw.stack ? maskSensitiveText(String(raw.stack), maskConfig) : undefined;
   const location = sourceLocation(stack);
   const result: FailLensError = {
     name: String(raw.name ?? (/assert/i.test(message) ? "AssertionError" : "Error")),
@@ -45,10 +45,10 @@ export function parseAssertionError(
     column: typeof raw.column === "number" ? raw.column : location.column,
   };
 
-  if (raw.expected !== undefined) result.expected = raw.expected;
-  if (raw.actual !== undefined) result.actual = raw.actual;
+  if (raw.expected !== undefined) result.expected = maskSensitiveData(raw.expected, maskConfig);
+  if (raw.actual !== undefined) result.actual = maskSensitiveData(raw.actual, maskConfig);
   if (raw.assertionMessage) {
-    result.assertionMessage = maskSensitiveText(String(raw.assertionMessage), maskFields);
+    result.assertionMessage = maskSensitiveText(String(raw.assertionMessage), maskConfig);
   }
 
   const descriptive = message.match(/^(?:AssertionError:\s*)?(.+?):\s*expected\s+/i);

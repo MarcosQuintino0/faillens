@@ -32,6 +32,7 @@
 - Campo `authorization` com valor `"Bearer real-token"` → `"Bearer <TOKEN>"`
 - URL com query param sensível: `?token=real&safe=keep` → `?token=***&safe=keep`
 - `extraFields` adicionais complementam (não substituem) os campos padrão
+- `maskPatterns` remove trechos sensíveis em texto livre, inclusive campos genéricos como `message`/`debug`
 - Campo com nome em PascalCase ou kebab-case comparado de forma canônica (`accessToken`, `access-token`, `access_token` → todos sensíveis)
 
 ---
@@ -247,6 +248,7 @@ unknown                          → sem padrão reconhecido
 **Casos críticos:**
 - Sem `faillens.config.js` → usa defaults (outputDir = reports/faillens, theme = dark)
 - Com `maskFields` customizado → merged com DEFAULT_MASK_FIELDS (sem duplicatas)
+- Com `maskPatterns` customizado → normalizado para strings serializáveis (incluindo RegExp literal)
 - `theme: "light"` → preservado; qualquer outro valor → `"dark"`
 - `outputDir` relativo → resolvido para absoluto a partir de projectRoot
 - `projectName` ausente mas `package.json` tem `name` → usa `package.json`
@@ -339,6 +341,7 @@ Se a instrumentação ganhar um contrato que `test/cli-run.test.js` não consiga
 - Sequência de chamadas renderizada (`request-row`, `sequence-legend`)
 - Resumo de persistência aparece somente para `confirmed-*` na comparação existente; não existe seção “Evidência de persistência”
 - Cenário BDD aparece somente na aba de evidência dos testes falhos e é incluído no conteúdo copiado
+- Aba `Criar chamado` contém as doze seções aprovadas e mantém fallback quando não há screenshot
 
 **Contrato visual (não regredir a aparência) — `visual-styling.test.js`:**
 - Paleta de verde unificada: `--green-line` nos dois temas, `--green-soft` em `rgba(34,197,94,.13)`, sem o órfão `rgba(53,209,126)`
@@ -387,9 +390,9 @@ Se a instrumentação ganhar um contrato que `test/cli-run.test.js` não consiga
 
 | Contrato | Arquivo |
 |---|---|
-| Texto/HTML/BDD determinísticos, escaping e clipboard rico/fallback | `test/unit/evidence.test.js` |
-| Terceira aba, ARIA, link, estado vazio, CSP e ausência de bytes | `test/integration/generate-html.test.js` |
-| Rejeição de schemes/traversal/path absoluto | `test/integration/security.test.js` |
+| Montagem do chamado, ordem das seções, metadata opcional, texto/HTML/BDD e clipboard | `test/unit/evidence.test.js` |
+| Terceira aba `Criar chamado`, ARIA, link, estado vazio, CSP e ausência de bytes | `test/integration/generate-html.test.js` |
+| Rejeição de schemes/traversal/path absoluto e escape integral do chamado | `test/integration/security.test.js` |
 
 Leia `PERFORMANCE_BUDGET.md` antes de modificar collector/ ou reporter/.
 

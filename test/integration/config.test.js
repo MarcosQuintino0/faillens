@@ -73,6 +73,18 @@ test("maskFields customizados são MERGEADOS com os padrão (sem duplicatas)", a
   assert.equal(unique.size, config.maskFields.length, "Não deve ter campos duplicados");
 });
 
+test("maskPatterns são normalizados para strings serializáveis", async () => {
+  const dir = await makeTmpDir();
+  await writeConfig(dir, 'module.exports = { maskPatterns: ["recovery-code=[A-Z0-9-]+", /otp-[a-z0-9]+/i] };\n');
+  const config = await loadFailLensConfig(dir);
+
+  assert.deepEqual(config.maskPatterns, [
+    "recovery-code=[A-Z0-9-]+",
+    "/otp-[a-z0-9]+/i",
+  ]);
+  assert.doesNotThrow(() => JSON.stringify(config));
+});
+
 test("projectName lido do faillens.config.js", async () => {
   const dir = await makeTmpDir();
   await writeConfig(dir, 'module.exports = { projectName: "meu-servico" };\n');

@@ -283,6 +283,16 @@ pre { margin: 0; padding: 15px; overflow: auto; background: var(--code); color: 
 .evidence-link:hover, .evidence-link:focus-visible { border-color: var(--violet); outline: 0; }
 .evidence-link.disabled { color: var(--faint); cursor: not-allowed; }
 .evidence-curl pre { min-height: 110px; }
+.issue-preview { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+.issue-preview article { padding: 20px; color: var(--text); font-size: 11px; line-height: 1.6; }
+.issue-preview h1 { margin: 0 0 20px; font-size: 17px; line-height: 1.35; }
+.issue-preview h2 { margin: 22px 0 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.issue-preview p { margin: 7px 0; white-space: pre-line; }
+.issue-preview pre { overflow: auto; margin: 8px 0; padding: 12px; border: 1px solid var(--line); border-radius: 7px; background: var(--code); color: var(--text); font: 10px/1.55 var(--mono); white-space: pre-wrap; }
+.issue-preview table { width: 100%; margin: 8px 0; border-collapse: collapse; }
+.issue-preview th, .issue-preview td { padding: 8px; border: 1px solid var(--line); text-align: left; vertical-align: top; }
+.issue-preview th { background: var(--code); font-size: 9px; text-transform: uppercase; }
+.issue-preview code { color: var(--text); font-family: var(--mono); white-space: pre-wrap; }
 .toast { position: fixed; right: 24px; bottom: 24px; z-index: 50; display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1px solid rgba(74,222,128,.28); border-radius: 9px; background: #111a19; color: #d8f8e5; box-shadow: 0 12px 35px rgba(0,0,0,.35); opacity: 0; transform: translateY(12px) scale(.98); pointer-events: none; transition: opacity .18s ease, transform .24s cubic-bezier(.2,.8,.2,1); }
 .toast.show { opacity: 1; transform: translateY(0) scale(1); }
 .toast-check { width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; background: rgba(74,222,128,.15); color: var(--green); font-weight: 800; animation: copy-pop .28s ease; }

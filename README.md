@@ -206,6 +206,19 @@ module.exports = {
 
 A lista adicional complementa a proteção padrão; ela não a desativa.
 
+Quando o segredo aparece dentro de um campo genérico, como `message`, `debug` ou `detail`, use `maskPatterns`. Cada padrão casa o trecho sensível que deve virar `***`:
+
+```js
+module.exports = {
+  maskPatterns: [
+    "recovery-code=[A-Z0-9-]+",
+    /otp-[a-z0-9]+/i,
+  ],
+}
+```
+
+Os padrões são aplicados antes dos parciais, JSON, HTML, cURL, erros e chamado serem persistidos. Prefira padrões específicos do seu domínio para evitar mascarar texto útil demais.
+
 ## Configuração opcional
 
 O FailLens funciona sem arquivo de configuração. Para personalizar, crie `faillens.config.js` na raiz do projeto:
@@ -218,11 +231,14 @@ module.exports = {
   branch: process.env.CI_COMMIT_REF_NAME,
   theme: "dark",
   maskFields: ["authorization", "cookie", "password", "token"],
+  maskPatterns: ["recovery-code=[A-Z0-9-]+"],
   cypressConfigFile: "cypress.config.js",
 }
 ```
 
 Todos os campos são opcionais.
+
+`faillens.config.js` é um arquivo JavaScript local e, como o próprio `cypress.config.js`, é executado pelo Node. Use esse arquivo apenas em projetos confiáveis.
 
 ## Uso em CI
 
@@ -282,9 +298,9 @@ O código TypeScript fica em `src/`, e o build CommonJS com declarações fica e
 - a prévia shell pode exigir ajustes manuais;
 - não usa IA.
 
-### Evidência para o dev
+### Criar chamado
 
-Testes falhos exibem uma terceira aba ao lado de **Chamada selecionada** e **Script de reprodução**. Ela reúne resumo sanitizado, status esperado/recebido, cURL e, quando o Cypress gerou a imagem, um link relativo para o screenshot original e a ação **Copiar evidência**.
+Testes falhos exibem uma terceira aba ao lado de **Chamada selecionada** e **Script de reprodução**. Ela monta um chamado sanitizado com título, contexto, BDD, resultados, request/response, comparação, falha, cURL, screenshot e rastreabilidade. A ação **Copiar chamado** tenta preservar texto, HTML rico e a imagem do Cypress, com fallback textual quando o navegador bloquear a imagem.
 
 Screenshots não são copiados, movidos nem embutidos no JSON/HTML: permanecem na pasta configurada pelo Cypress. A imagem do teste selecionado é carregada por referência e exibida somente ao abrir a aba de evidência. Por isso, o link e a prévia deixam de funcionar se o PNG for apagado ou movido. A cópia rica (`text/plain`, `text/html` e, quando permitido, `image/png`) depende das APIs do navegador; páginas `file://` podem bloquear canvas ou clipboard, mas o fallback textual, a prévia com cópia nativa/arraste e o botão **Abrir screenshot** continuam disponíveis. Nenhum dado é enviado ao Jira ou à internet.
 
@@ -309,7 +325,7 @@ O FailLens foi desenhado para dados de teste potencialmente sensíveis:
 - nenhuma dependência de internet para abrir o HTML;
 - máscara aplicada antes da persistência do relatório.
 
-Ainda assim, trate o relatório como um artifact de teste: adicione campos específicos do seu domínio em `maskFields` e controle quem pode acessar artifacts do CI.
+Ainda assim, trate o relatório como um artifact de teste: adicione campos específicos do seu domínio em `maskFields`, use `maskPatterns` para segredos em textos livres e controle quem pode acessar artifacts do CI.
 
 ## Licença
 

@@ -1,4 +1,4 @@
-import { maskSensitiveData, maskUrl } from "./sensitiveMask";
+import { maskSensitiveData, maskUrl, type MaskConfig } from "./sensitiveMask";
 
 export interface CurlInput {
   method: string;
@@ -11,12 +11,12 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-export function generateCurl(input: CurlInput, maskFields: string[] = []): string {
+export function generateCurl(input: CurlInput, maskConfig: MaskConfig = []): string {
   const method = (input.method || "GET").toUpperCase();
   const methodArgument = /^[A-Z0-9-]+$/.test(method) ? method : shellQuote(method);
-  const url = maskUrl(input.url, maskFields);
-  const headers = maskSensitiveData(input.headers ?? {}, maskFields);
-  const body = maskSensitiveData(input.body, maskFields);
+  const url = maskUrl(input.url, maskConfig);
+  const headers = maskSensitiveData(input.headers ?? {}, maskConfig);
+  const body = maskSensitiveData(input.body, maskConfig);
   const lines = [`curl -X ${methodArgument} ${shellQuote(url)}`];
 
   for (const [name, value] of Object.entries(headers)) {

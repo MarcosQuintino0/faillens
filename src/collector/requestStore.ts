@@ -8,7 +8,7 @@ import type {
   TestState,
 } from "../types/report";
 import { generateCurl } from "./curlGenerator";
-import { maskSensitiveData, maskSensitiveText, maskUrl } from "./sensitiveMask";
+import { maskSensitiveData, maskSensitiveText, maskUrl, type MaskConfig } from "./sensitiveMask";
 import { parseAssertionError } from "../reporter/diagnostics/parseAssertionError";
 import { asRecord, clampNumber, createId } from "../utils/format";
 import type { PlannedTestAssertions } from "./extractSourceAssertions";
@@ -96,8 +96,11 @@ export class RequestStore {
   private readonly specs = new Map<string, MutableSpec>();
   private currentTestId?: string;
   private currentSpecPath = "unknown-spec";
+  private readonly maskConfig: MaskConfig;
 
-  constructor(private readonly maskFields: string[] = []) {}
+  constructor(maskFields: string[] = [], maskPatterns: string[] = []) {
+    this.maskConfig = { fields: maskFields, patterns: maskPatterns };
+  }
 
   private getSpec(specPath = this.currentSpecPath): MutableSpec {
     const key = specPath || "unknown-spec";
@@ -140,9 +143,9 @@ export class RequestStore {
       test = this.findTest(specPath, id)!;
     }
     const id = payload.id || createId("req");
-    const headers = maskSensitiveData(asRecord(payload.requestHeaders), this.maskFields);
-    const body = maskSensitiveData(payload.requestBody ?? null, this.maskFields);
-    const url = maskUrl(String(payload.url || ""), this.maskFields);
+    const headers = maskSensitiveData(asRecord(payload.requestHeaders), this.maskConfig);
+    const body = maskSensitiveData(payload.requestBody ?? null, this.maskConfig);
+    const url = maskUrl(String(payload.url || ""), this.maskConfig);
     const request: FailLensRequest = {
       id,
       order: test.requests.length + 1,
@@ -150,7 +153,7 @@ export class RequestStore {
       method: String(payload.method || "GET").toUpperCase(),
       url,
       originalUrl: payload.originalUrl
-        ? maskUrl(String(payload.originalUrl), this.maskFields)
+        ? maskUrl(String(payload.originalUrl), this.maskConfig)
         : undefined,
       requestHeaders: headers,
       requestBody: body,
@@ -161,7 +164,7 @@ export class RequestStore {
       durationMs: 0,
       curl: generateCurl(
         { method: String(payload.method || "GET"), url, headers, body },
-        this.maskFields,
+        this.maskConfig,
       ),
     };
     test.requests.push(request);
@@ -174,16 +177,16 @@ export class RequestStore {
     if (!request) return null;
     request.receivedStatus =
       typeof payload.receivedStatus === "number" ? payload.receivedStatus : request.receivedStatus;
-    request.responseHeaders = maskSensitiveData(asRecord(payload.responseHeaders), this.maskFields);
-    request.responseBody = maskSensitiveData(payload.responseBody ?? null, this.maskFields);
+    request.responseHeaders = maskSensitiveData(asRecord(payload.responseHeaders), this.maskConfig);
+    request.responseBody = maskSensitiveData(payload.responseBody ?? null, this.maskConfig);
     request.redirects = Array.isArray(payload.redirects)
       ? payload.redirects.map((redirect) => ({
           statusCode: typeof redirect.statusCode === "number" ? redirect.statusCode : undefined,
-          location: maskUrl(String(redirect.location || ""), this.maskFields),
+          location: maskUrl(String(redirect.location || ""), this.maskConfig),
         })).filter((redirect) => redirect.location)
       : undefined;
     request.durationMs = Math.max(0, clampNumber(payload.durationMs));
-    if (payload.error) request.error = parseAssertionError(payload.error, this.maskFields);
+    if (payload.error) request.error = parseAssertionError(payload.error, this.maskConfig);
     request.curl = generateCurl(
       {
         method: request.method,
@@ -191,7 +194,7 @@ export class RequestStore {
         headers: request.requestHeaders,
         body: request.requestBody,
       },
-      this.maskFields,
+      this.maskConfig,
     );
     return null;
   }
@@ -201,17 +204,17 @@ export class RequestStore {
     if (!test) return null;
     test.state = normalizeState(payload.state);
     test.durationMs = Math.max(0, clampNumber(payload.durationMs));
-    if (payload.error) test.error = parseAssertionError(payload.error, this.maskFields);
+    if (payload.error) test.error = parseAssertionError(payload.error, this.maskConfig);
     if (Array.isArray(payload.assertions)) {
       test.assertions = payload.assertions.map((assertion, index) => ({
         id: String(assertion.id || `assertion-${index + 1}`),
-        title: maskSensitiveText(String(assertion.title || "Assertion observada"), this.maskFields),
+        title: maskSensitiveText(String(assertion.title || "Assertion observada"), this.maskConfig),
         state: normalizeAssertionState(assertion.state),
         message: assertion.message
-          ? maskSensitiveText(String(assertion.message), this.maskFields)
+          ? maskSensitiveText(String(assertion.message), this.maskConfig)
           : undefined,
-        expected: maskSensitiveData(assertion.expected, this.maskFields),
-        actual: maskSensitiveData(assertion.actual, this.maskFields),
+        expected: maskSensitiveData(assertion.expected, this.maskConfig),
+        actual: maskSensitiveData(assertion.actual, this.maskConfig),
         file: assertion.file ? String(assertion.file) : undefined,
         line: typeof assertion.line === "number" ? assertion.line : undefined,
         column: typeof assertion.column === "number" ? assertion.column : undefined,
@@ -296,7 +299,7 @@ export class RequestStore {
   // resolução de regras acontecem em buildReportModel (visão de todos os specs).
   mergeContract(specPath: string, contract: FailLensContract | undefined): void {
     if (contract) {
-      this.getSpec(specPath).contract = maskSensitiveData(contract, this.maskFields) as FailLensContract;
+      this.getSpec(specPath).contract = maskSensitiveData(contract, this.maskConfig) as FailLensContract;
     }
   }
 
@@ -363,7 +366,7 @@ export class RequestStore {
       const lastAttempt = asRecord(attempts.at(-1));
       test.durationMs = clampNumber(lastAttempt.wallClockDuration ?? resultTest.duration, test.durationMs);
       const error = lastAttempt.error ?? resultTest.displayError;
-      if (error && !test.error) test.error = parseAssertionError(error, this.maskFields);
+      if (error && !test.error) test.error = parseAssertionError(error, this.maskConfig);
 
       for (const request of test.requests) {
         if (!request.error && request.durationMs === 0 && test.state === "failed" && test.error) {
@@ -375,7 +378,7 @@ export class RequestStore {
           if (Number.isFinite(startedAt)) request.durationMs = Math.max(0, Date.now() - startedAt);
           request.error = {
             name: "RequestError",
-            message: maskSensitiveText(test.error.message, this.maskFields),
+            message: maskSensitiveText(test.error.message, this.maskConfig),
             stack: test.error.stack,
           };
         }

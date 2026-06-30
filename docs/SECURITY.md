@@ -34,6 +34,8 @@ Nunca mova a única barreira de sanitização para `generateJson` ou `generateHt
 
 Os padrões ficam em `DEFAULT_MASK_FIELDS`, em `src/collector/sensitiveMask.ts`. A comparação de nomes é canônica e case-insensitive. `maskFields` da configuração acrescenta campos do domínio sem substituir os padrões.
 
+`maskPatterns` cobre segredos dentro de campos genéricos (`message`, `debug`, `detail` etc.). Os padrões são normalizados para strings serializáveis antes de entrar na configuração Cypress gerada e são aplicados em texto livre, JSON embutido, cURL, erros, assertions, contratos e URLs. Padrões inválidos são ignorados para não impedir a geração do relatório; prefira padrões específicos para evitar mascaramento excessivo.
+
 Comportamentos especiais:
 
 - Bearer token vira `Bearer <TOKEN>`.
@@ -87,6 +89,8 @@ Objetos reconstruídos a partir de payloads devem preservar chaves como `__proto
 ## Integridade do consumidor
 
 O FailLens cria instrumentação somente em `.faillens/`. Não altera configuração, support files ou specs do consumidor. A única exceção é `faillens init`, que adiciona um script sem sobrescrever um valor existente.
+
+`faillens.config.js` é executado localmente via Node, assim como `cypress.config.js`. Não rode FailLens em projetos não confiáveis nem aceite configuração JS de terceiros sem revisão.
 
 ## Checklist para mudanças
 

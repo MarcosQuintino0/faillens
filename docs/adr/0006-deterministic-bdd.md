@@ -18,7 +18,7 @@ Gerar `bddScenario` somente para testes falhos por meio de templates fixos em `b
 - Endpoint contratual é usado apenas quando há exatamente uma rota compatível com o método; caso contrário prevalece a URL observada sanitizada.
 - Conflitos entre assertion e contrato são apresentados, nunca resolvidos silenciosamente.
 - Consequências posteriores exigem `persistenceEvidence` confirmado.
-- O BDD aparece apenas na aba **Evidência para o dev** e no clipboard dessa evidência. Request, response e cURL permanecem nas superfícies existentes.
+- O BDD aparece na terceira aba e no clipboard. Essa superfície foi posteriormente ampliada e renomeada para **Criar chamado** pelo ADR 0007.
 
 ## Consequências
 

@@ -67,6 +67,7 @@ O browser não acessa diretamente o filesystem Node. `cy.task` é a fronteira en
 - `provenance/resolveContracts.ts`: consolida contratos por `@contrato` e resolve o vínculo teste→regra (cross-spec).
 - `provenance/buildFacts.ts`: monta os facts, separa expectativa contratual de evidência observada de persistência e marca conflitos entre fontes.
 - `buildBddScenario.ts`: transforma somente fatos sanitizados em linhas BDD tipadas, cada uma com referências de origem.
+- `evidence.ts`: compõe em memória o chamado completo e gera as representações `text/plain`/`text/html`; nenhum segundo modelo é persistido.
 - `buildPayloadDiff.ts`: identifica evidências de divergência no payload.
 - `diagnostics/`: classifica falhas por regras determinísticas.
 - `generateJson.ts`: grava o contrato de dados.

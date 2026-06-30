@@ -1,5 +1,5 @@
 import { generateCurl } from "../collector/curlGenerator";
-import { maskSensitiveData, maskSensitiveText, maskUrl } from "../collector/sensitiveMask";
+import { maskSensitiveData, maskSensitiveText, maskUrl, type MaskConfig } from "../collector/sensitiveMask";
 import type { ResolvedFailLensConfig } from "../types/config";
 import type {
   FailLensError,
@@ -21,27 +21,27 @@ import { contractIdForSpec, resolveContracts, resolveRuleRef, type ResolvedContr
 import type { FailLensContract, FailLensRuleRef } from "../types/report";
 
 // Mascara mensagens e textos do contrato antes de persistir (mask-before-persistence).
-function sanitizeContract(contract: FailLensContract, maskFields: string[]): FailLensContract {
+function sanitizeContract(contract: FailLensContract, maskConfig: MaskConfig): FailLensContract {
   const maskAttributes = (attributes: Record<string, string | number | boolean>) => {
     const out: Record<string, string | number | boolean> = {};
     for (const [key, value] of Object.entries(attributes)) {
-      out[key] = typeof value === "string" ? maskSensitiveText(value, maskFields) : value;
+      out[key] = typeof value === "string" ? maskSensitiveText(value, maskConfig) : value;
     }
     return out;
   };
   return {
     ...contract,
-    resumo: contract.resumo ? maskSensitiveText(contract.resumo, maskFields) : contract.resumo,
+    resumo: contract.resumo ? maskSensitiveText(contract.resumo, maskConfig) : contract.resumo,
     fields: contract.fields.map((field) => ({
       ...field,
       attributes: maskAttributes(field.attributes),
-      raw: maskSensitiveText(field.raw, maskFields),
+      raw: maskSensitiveText(field.raw, maskConfig),
     })),
     rules: contract.rules.map((rule) => ({
       ...rule,
-      message: rule.message ? maskSensitiveText(rule.message, maskFields) : rule.message,
+      message: rule.message ? maskSensitiveText(rule.message, maskConfig) : rule.message,
       attributes: maskAttributes(rule.attributes),
-      raw: maskSensitiveText(rule.raw, maskFields),
+      raw: maskSensitiveText(rule.raw, maskConfig),
     })),
     permissao: contract.permissao ? maskAttributes(contract.permissao) : contract.permissao,
   };
@@ -125,15 +125,15 @@ export function inferMainRequest(test: FailLensTest, ruleRefs: FailLensRuleRef[]
   return winner;
 }
 
-function maskError(error: FailLensError | undefined, maskFields: string[]): FailLensError | undefined {
+function maskError(error: FailLensError | undefined, maskConfig: MaskConfig): FailLensError | undefined {
   if (!error) return undefined;
-  const parsed = parseAssertionError(error, maskFields);
+  const parsed = parseAssertionError(error, maskConfig);
   return {
     ...parsed,
-    message: maskSensitiveText(error.message, maskFields),
-    stack: error.stack ? maskSensitiveText(error.stack, maskFields) : undefined,
-    expected: maskSensitiveData(parsed.expected, maskFields),
-    actual: maskSensitiveData(parsed.actual, maskFields),
+    message: maskSensitiveText(error.message, maskConfig),
+    stack: error.stack ? maskSensitiveText(error.stack, maskConfig) : undefined,
+    expected: maskSensitiveData(parsed.expected, maskConfig),
+    actual: maskSensitiveData(parsed.actual, maskConfig),
   };
 }
 
@@ -391,20 +391,20 @@ function buildReproductionScript(test: FailLensTest, chain: RequestChain): strin
   return lines.join("\n");
 }
 
-function sanitizeRequest(request: FailLensRequest, maskFields: string[]): FailLensRequest {
+function sanitizeRequest(request: FailLensRequest, maskConfig: MaskConfig): FailLensRequest {
   const sanitized: FailLensRequest = {
     ...request,
-    url: maskUrl(request.url, maskFields),
-    originalUrl: request.originalUrl ? maskUrl(request.originalUrl, maskFields) : undefined,
-    requestHeaders: maskSensitiveData(request.requestHeaders || {}, maskFields),
-    requestBody: maskSensitiveData(request.requestBody, maskFields),
-    responseHeaders: maskSensitiveData(request.responseHeaders || {}, maskFields),
-    responseBody: maskSensitiveData(request.responseBody, maskFields),
+    url: maskUrl(request.url, maskConfig),
+    originalUrl: request.originalUrl ? maskUrl(request.originalUrl, maskConfig) : undefined,
+    requestHeaders: maskSensitiveData(request.requestHeaders || {}, maskConfig),
+    requestBody: maskSensitiveData(request.requestBody, maskConfig),
+    responseHeaders: maskSensitiveData(request.responseHeaders || {}, maskConfig),
+    responseBody: maskSensitiveData(request.responseBody, maskConfig),
     redirects: request.redirects?.map((redirect) => ({
       statusCode: redirect.statusCode,
-      location: maskUrl(redirect.location, maskFields),
+      location: maskUrl(redirect.location, maskConfig),
     })),
-    error: maskError(request.error, maskFields),
+    error: maskError(request.error, maskConfig),
   };
   sanitized.curl = generateCurl(
     {
@@ -413,7 +413,7 @@ function sanitizeRequest(request: FailLensRequest, maskFields: string[]): FailLe
       headers: sanitized.requestHeaders,
       body: sanitized.requestBody,
     },
-    maskFields,
+    maskConfig,
   );
   return sanitized;
 }
@@ -421,18 +421,18 @@ function sanitizeRequest(request: FailLensRequest, maskFields: string[]): FailLe
 function prepareAssertions(
   source: FailLensTest,
   error: FailLensError | undefined,
-  maskFields: string[],
+  maskConfig: MaskConfig,
 ): FailLensAssertion[] {
   if (source.assertions?.length) {
     return source.assertions.map((assertion, index) => ({
       ...assertion,
       id: assertion.id || `assertion-${index + 1}`,
-      title: maskSensitiveText(assertion.title || "Assertion observada", maskFields),
+      title: maskSensitiveText(assertion.title || "Assertion observada", maskConfig),
       message: assertion.message
-        ? maskSensitiveText(assertion.message, maskFields)
+        ? maskSensitiveText(assertion.message, maskConfig)
         : undefined,
-      expected: maskSensitiveData(assertion.expected, maskFields),
-      actual: maskSensitiveData(assertion.actual, maskFields),
+      expected: maskSensitiveData(assertion.expected, maskConfig),
+      actual: maskSensitiveData(assertion.actual, maskConfig),
     }));
   }
   if (!error) return [];
@@ -484,7 +484,7 @@ function resolveStatusExpectation(
 
 function prepareTest(
   source: FailLensTest,
-  maskFields: string[],
+  maskConfig: MaskConfig,
   ruleIndex?: ResolvedContracts["ruleIndex"],
   contextContractId?: string,
   contracts: FailLensContract[] = [],
@@ -500,8 +500,8 @@ function prepareTest(
     title: source.titlePath?.length
       ? source.titlePath[source.titlePath.length - 1]
       : source.title,
-    error: maskError(source.error, maskFields),
-    requests: source.requests.map((request) => sanitizeRequest(request, maskFields)),
+    error: maskError(source.error, maskConfig),
+    requests: source.requests.map((request) => sanitizeRequest(request, maskConfig)),
     evidence: sanitizeEvidence(source.evidence),
   };
   // Procedência: resolve o vínculo antes de escolher a request principal, pois
@@ -511,7 +511,7 @@ function prepareTest(
   );
   const main = inferMainRequest(test, resolvedRefs);
   const chain = computeChain(test.requests);
-  test.assertions = prepareAssertions(source, test.error, maskFields);
+  test.assertions = prepareAssertions(source, test.error, maskConfig);
   test.mainRequestId = main?.id;
   annotateRequests(test, main, chain);
   test.statusExpectation = resolveStatusExpectation(test, main);
@@ -542,7 +542,7 @@ function prepareTest(
     test.persistenceExpectation = persistence.expectation;
     test.persistenceEvidence = persistence.evidence;
   }
-  const facts = buildFacts(test, main, resolvedRefs, maskFields, persistence);
+  const facts = buildFacts(test, main, resolvedRefs, maskConfig, persistence);
   if (facts.length) test.facts = facts;
 
   test.payloadDiff = buildPayloadDiff(test.assertions, main?.responseBody, test.state === "failed");
@@ -564,12 +564,15 @@ export function buildReportModel(
   inputSpecs: FailLensSpec[],
   options: BuildReportOptions = {},
 ): FailLensReport {
-  const maskFields = options.config?.maskFields ?? [];
+  const maskConfig = {
+    fields: options.config?.maskFields ?? [],
+    patterns: options.config?.maskPatterns ?? [],
+  };
   const resolved = resolveContracts(inputSpecs);
-  const contracts = resolved.contracts.map((contract) => sanitizeContract(contract, maskFields));
+  const contracts = resolved.contracts.map((contract) => sanitizeContract(contract, maskConfig));
   const specs = inputSpecs.map((spec) => {
     const contextContractId = contractIdForSpec(spec.specPath, resolved.contracts);
-    const tests = spec.tests.map((test) => prepareTest(test, maskFields, resolved.ruleIndex, contextContractId, contracts));
+    const tests = spec.tests.map((test) => prepareTest(test, maskConfig, resolved.ruleIndex, contextContractId, contracts));
     return {
       specPath: spec.specPath,
       durationMs: spec.durationMs || tests.reduce((sum, test) => sum + test.durationMs, 0),

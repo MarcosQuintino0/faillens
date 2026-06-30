@@ -109,7 +109,7 @@ export function registerNodeEvents(
   cypressConfig: Record<string, unknown>,
   options: RegisterNodeEventsOptions,
 ): Record<string, unknown> {
-  const store = new RequestStore(options.config.maskFields);
+  const store = new RequestStore(options.config.maskFields, options.config.maskPatterns);
   const screenshots: CapturedScreenshot[] = [];
   const screenshotsFolder = path.resolve(
     options.projectRoot,

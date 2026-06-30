@@ -1,8 +1,9 @@
-import { buildEvidenceHtml, buildEvidenceText } from "../reporter/evidence";
+import { buildEvidenceHtml, buildEvidenceText, buildIssueContent } from "../reporter/evidence";
 import { copyEvidenceToClipboard } from "./evidenceClipboard";
 
 const buildEvidenceTextSource = buildEvidenceText.toString();
 const buildEvidenceHtmlSource = buildEvidenceHtml.toString();
+const buildIssueContentSource = buildIssueContent.toString();
 const copyEvidenceSource = copyEvidenceToClipboard.toString();
 
 export const clientScript = String.raw`
@@ -10,6 +11,7 @@ export const clientScript = String.raw`
   "use strict";
   var buildEvidenceText = ${buildEvidenceTextSource};
   var buildEvidenceHtml = ${buildEvidenceHtmlSource};
+  var buildIssueContent = ${buildIssueContentSource};
   var copyEvidenceToClipboard = ${copyEvidenceSource};
   var report = JSON.parse(document.getElementById("faillens-data").textContent);
   var localToken = /^https?:$/.test(location.protocol) ? new URLSearchParams(location.search).get("token") : null;
@@ -436,15 +438,15 @@ export const clientScript = String.raw`
       banner + comparison;
   }
 
-  function selectedPanel(test, selectedRequest, selectedContext) {
+  function selectedPanel(test, selectedRequest, selectedContext, specPath) {
     var callView = state.view === "call";
     var scriptView = state.view === "script";
     var flow = test.requests.map(function (request) { return request.method + ' ' + chainedUrl(request); }).join(' → ');
     var tabs = '<div class="debug-tabs" role="tablist" aria-label="Detalhes do teste">' +
       '<button id="detail-tab-call" class="debug-tab ' + (callView ? 'active' : '') + '" data-detail-tab="call" role="tab" aria-selected="' + callView + '" aria-controls="detail-panel-call" tabindex="' + (callView ? '0' : '-1') + '">Chamada selecionada</button>' +
       '<button id="detail-tab-script" class="debug-tab ' + (scriptView ? 'active' : '') + '" data-detail-tab="script" role="tab" aria-selected="' + scriptView + '" aria-controls="detail-panel-script" tabindex="' + (scriptView ? '0' : '-1') + '">Script de reprodução</button>' +
-      '<button id="detail-tab-evidence" class="debug-tab ' + (state.view === "evidence" ? 'active' : '') + '" data-detail-tab="evidence" role="tab" aria-selected="' + (state.view === "evidence") + '" aria-controls="detail-panel-evidence" tabindex="' + (state.view === "evidence" ? '0' : '-1') + '">Evidência para o dev</button></div>';
-    var hint = callView ? selectedContext : scriptView ? 'fluxo completo · ' + flow : 'pronto para compartilhar no chamado';
+      '<button id="detail-tab-evidence" class="debug-tab ' + (state.view === "evidence" ? 'active' : '') + '" data-detail-tab="evidence" role="tab" aria-selected="' + (state.view === "evidence") + '" aria-controls="detail-panel-evidence" tabindex="' + (state.view === "evidence" ? '0' : '-1') + '">Criar chamado</button></div>';
+    var hint = callView ? selectedContext : scriptView ? 'fluxo completo · ' + flow : 'documento sanitizado · pronto para copiar';
     var content;
     if (callView) {
       content = selectedRequest
@@ -458,24 +460,17 @@ export const clientScript = String.raw`
         '<div class="code-panel reproduction-code"><div class="code-head"><span class="code-title mono">reproduzir.sh</span><button class="copy-button mini" data-copy-kind="script" aria-label="Copiar script" title="Copiar script">' + COPY_ICON + '</button></div>' +
         '<pre>' + e(test.reproductionScript || "Nenhuma request disponível.") + '</pre></div>';
     } else {
-      var main = test.requests.find(function (request) { return request.id === test.mainRequestId; }) || test.requests[0];
-      var expectation = test.statusExpectation || {};
-      var expected = expectation.label || (test.error && test.error.expected != null ? String(test.error.expected) : "Não especificado");
-      var actual = expectation.actual != null ? String(expectation.actual) : (main && main.receivedStatus != null ? String(main.receivedStatus) : "Sem resposta");
+      var issue = buildIssueContent(test, specPath, report.contracts || []);
       var screenshot = test.evidence && test.evidence.screenshots && test.evidence.screenshots[0];
       var screenshotSource = evidenceUrl(screenshot);
-      var summary = test.diagnosis && test.diagnosis.summary || test.error && test.error.message || "Falha registrada sem resumo.";
-      var bddText = test.bddScenario && test.bddScenario.text;
-      var bddHtml = bddText
-        ? '<div class="code-panel evidence-curl"><div class="code-head"><span class="code-title">Cenário BDD</span></div><pre>' + e(bddText) + '</pre></div>'
-        : '';
       var screenshotHtml = screenshot
         ? '<div class="evidence-screenshot"><div class="evidence-screenshot-head"><div><strong>Screenshot do Cypress</strong><span>' + e(screenshot.fileName) + '</span></div><a class="evidence-link" href="' + e(screenshotSource) + '" target="_blank" rel="noopener noreferrer">Abrir screenshot</a></div>' +
           '<div class="evidence-preview-wrap"><img class="evidence-preview" data-evidence-preview src="' + e(screenshotSource) + '" alt="Screenshot do Cypress: ' + e(screenshot.fileName) + '" loading="lazy" decoding="async" draggable="true"><p>Clique com o botão direito na imagem para copiá-la ou arraste-a para o Jira quando a cópia automática for bloqueada.</p></div></div>'
         : '<div class="evidence-empty"><div><strong>O Cypress não gerou screenshot para este teste.</strong><span>A evidência textual e o cURL ainda podem ser copiados.</span></div><span class="evidence-link disabled" aria-disabled="true">Abrir screenshot</span></div>';
-      content = '<div class="evidence-panel"><div class="evidence-heading"><div><h3>Evidência para o desenvolvedor</h3><p>Resumo sanitizado para compartilhar em um chamado.</p></div><button class="copy-button primary" data-copy-kind="evidence">Copiar evidência</button></div>' +
-        '<div class="evidence-summary"><span>Falha</span><strong>' + e(summary) + '</strong><div><span>Esperado: <b>' + e(expected) + '</b></span><span>Recebido: <b>' + e(actual) + '</b></span></div></div>' + bddHtml +
-        '<div class="code-panel evidence-curl"><div class="code-head"><span class="code-title">cURL para reprodução</span><button class="copy-button mini" data-copy-kind="evidence-curl" aria-label="Copiar cURL">' + COPY_ICON + ' Copiar cURL</button></div><pre>' + e(main && main.curl || "Nenhuma request disponível.") + '</pre></div>' + screenshotHtml + '</div>';
+      content = issue
+        ? '<div class="evidence-panel"><div class="evidence-heading"><div><h3>Criar chamado</h3><p>Conteúdo factual, sanitizado e pronto para Jira, GitHub, Azure DevOps ou documentos.</p></div><button class="copy-button primary" data-copy-kind="evidence">Copiar chamado</button></div>' +
+          '<div class="issue-preview">' + buildEvidenceHtml(issue) + '</div>' + screenshotHtml + '</div>'
+        : '<div class="evidence-empty"><div><strong>Criação de chamado disponível somente para testes falhos.</strong><span>Selecione um teste com falha para gerar o documento.</span></div></div>';
     }
     return '<section class="panel debug-panel"><div class="debug-toolbar">' + tabs + '<span class="debug-context">' + e(hint) + '</span></div>' +
       '<div id="detail-panel-' + e(state.view) + '" class="panel-body" role="tabpanel" aria-labelledby="detail-tab-' + e(state.view) + '">' + content + '</div></section>';
@@ -508,7 +503,7 @@ export const clientScript = String.raw`
       '<section class="panel"><div class="panel-head sequence-head"><div><h3>Sequência de chamadas</h3><span class="panel-hint">Os valores se encadeiam — a resposta de uma chamada alimenta a próxima.</span></div>' +
       '<div class="sequence-legend"><span><i class="legend-dot s2"></i>2xx</span><span><i class="legend-dot s3"></i>3xx</span><span><i class="legend-dot s45"></i>4xx / 5xx</span></div></div>' +
       '<div class="panel-body sequence-scroll"><div class="sequence">' + requestRows(test) + '</div></div></section>' +
-      selectedPanel(test, selectedRequest, selectedContext);
+      selectedPanel(test, selectedRequest, selectedContext, item.spec.specPath);
     positionBarTimes();
     if (state.view === "evidence") prepareEvidenceImage(item);
   }
@@ -613,19 +608,9 @@ export const clientScript = String.raw`
       var evidenceMain = current.test.requests.find(function (request) { return request.id === current.test.mainRequestId; }) || current.test.requests[0];
       copy(evidenceMain ? evidenceMain.curl : "", copyButton);
     } else if (kind === "evidence") {
-      var mainRequest = current.test.requests.find(function (request) { return request.id === current.test.mainRequestId; }) || current.test.requests[0];
-      var status = current.test.statusExpectation || {};
+      var input = buildIssueContent(current.test, current.spec.specPath, report.contracts || []);
+      if (!input) return;
       var screenshot = current.test.evidence && current.test.evidence.screenshots && current.test.evidence.screenshots[0];
-      var input = {
-        title: current.test.title,
-        specPath: current.spec.specPath,
-        failure: current.test.diagnosis && current.test.diagnosis.summary || current.test.error && current.test.error.message || "Falha registrada sem resumo.",
-        expected: status.label || current.test.error && current.test.error.expected || "Não especificado",
-        actual: status.actual != null ? status.actual : mainRequest && mainRequest.receivedStatus != null ? mainRequest.receivedStatus : "Sem resposta",
-        bdd: current.test.bddScenario && current.test.bddScenario.text,
-        curl: mainRequest && mainRequest.curl || "Não disponível",
-        screenshot: screenshot,
-      };
       var text = buildEvidenceText(input);
       var html = buildEvidenceHtml(input, evidenceImage.key === itemKey(current) ? evidenceImage.dataUrl : null);
       copyEvidenceToClipboard({ text: text, html: html, imageBlob: evidenceImage.key === itemKey(current) ? evidenceImage.blob : null, hasScreenshot: Boolean(screenshot) }, {
@@ -636,10 +621,10 @@ export const clientScript = String.raw`
         fallbackCopy: function (value) { return fallbackCopyValue(value); },
       }).then(function (result) {
         var messages = {
-          complete: "Evidência completa copiada: texto, cURL e imagem.",
-          "without-image": "Texto e cURL copiados. O navegador bloqueou a cópia automática da imagem.",
-          "text-only": "Evidência textual copiada. Use “Abrir screenshot” para copiar a imagem.",
-          failed: "Não foi possível copiar a evidência.",
+          complete: "Chamado completo copiado: texto, formatação e imagem.",
+          "without-image": "Chamado copiado sem imagem. O navegador bloqueou a cópia automática do screenshot.",
+          "text-only": "Chamado textual copiado. Use “Abrir screenshot” para copiar a imagem.",
+          failed: "Não foi possível copiar o chamado.",
         };
         copyFeedback(copyButton, result !== "failed", messages[result]);
       });

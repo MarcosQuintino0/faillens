@@ -121,20 +121,24 @@ test("toolbar mantém as três abas na ordem, com ARIA e navegação por teclado
   assert.match(html, /role="tab"/);
   assert.match(html, /aria-selected=/);
   assert.match(html, /ArrowRight|ArrowLeft/);
+  assert.match(html, /Criar chamado/);
+  assert.doesNotMatch(html, />Evidência para o dev<\/button>/);
 });
 
-test("aba de evidência inclui resumo, cURL, ações e estado sem screenshot", async () => {
+test("aba de criação inclui chamado completo, ação e estado sem screenshot", async () => {
   const { html } = await buildAndGenerate([makeSpec([makeTest("t1")])]);
-  assert.match(html, /Evidência para o desenvolvedor/);
-  assert.match(html, /Copiar evidência/);
-  assert.match(html, /Copiar cURL/);
-  assert.match(html, /Cenário BDD/);
-  assert.match(html, /bddScenario && test\.bddScenario\.text/);
+  assert.match(html, /Criar chamado/);
+  assert.match(html, /Copiar chamado/);
+  assert.match(html, /Resultado atual/);
+  assert.match(html, /Resultado esperado/);
+  assert.match(html, /Requisição enviada/);
+  assert.match(html, /Resposta recebida/);
+  assert.match(html, /Rastreabilidade/);
   assert.match(html, /Abrir screenshot/);
   assert.match(html, /O Cypress não gerou screenshot para este teste/);
-  assert.match(html, /Evidência completa copiada: texto, cURL e imagem/);
-  assert.match(html, /Texto e cURL copiados\. O navegador bloqueou a cópia automática da imagem/);
-  assert.match(html, /Evidência textual copiada\. Use “Abrir screenshot” para copiar a imagem/);
+  assert.match(html, /Chamado completo copiado: texto, formatação e imagem/);
+  assert.match(html, /Chamado copiado sem imagem\. O navegador bloqueou a cópia automática do screenshot/);
+  assert.match(html, /Chamado textual copiado\. Use “Abrir screenshot” para copiar a imagem/);
 });
 
 test("screenshot usa link relativo seguro e nunca embute bytes PNG", async () => {

@@ -53,6 +53,10 @@ Campos enriquecidos:
 
 O cenário é produzido por templates fixos, sem IA generativa. Linhas sem evidência são omitidas; normalmente há entre quatro e seis linhas. A operação usa o endpoint do contrato somente quando existe uma única rota contratual compatível com o método principal; caso contrário usa a URL observada sanitizada. Conflitos entre assertion e contrato são escritos explicitamente. Consequências de persistência aparecem somente para `confirmed-*`. Testes aprovados e estados `not-verified` não geram BDD/conclusão posterior.
 
+### Criação de chamado
+
+O chamado não cria um novo campo no schema. `buildIssueContent` compõe em memória os dados já sanitizados de `FailLensTest`, `FailLensContract` e `FailLensSpec`, e os renderizadores produzem `text/plain` e `text/html`. A ordem fixa é: título, contexto, BDD, resultado atual, resultado esperado, request, response, comparação, falha, cURL, evidência visual e rastreabilidade. Metadata opcional ausente degrada para texto neutro sem impedir a cópia.
+
 ### Procedência (`facts` e `contracts`)
 
 `facts` é o modelo interno de procedência. Cada fato carrega `source` em

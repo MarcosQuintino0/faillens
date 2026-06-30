@@ -7,6 +7,7 @@ export interface FailLensConfig {
   branch?: string;
   theme?: FailLensTheme;
   maskFields?: string[];
+  maskPatterns?: Array<string | RegExp>;
   cypressConfigFile?: string;
 }
 
@@ -17,5 +18,6 @@ export interface ResolvedFailLensConfig {
   branch?: string;
   theme: FailLensTheme;
   maskFields: string[];
+  maskPatterns: string[];
   cypressConfigFile?: string;
 }

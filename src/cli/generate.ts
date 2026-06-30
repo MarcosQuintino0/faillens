@@ -33,6 +33,7 @@ export async function generateCommand(
       branch: source.project?.branch,
       theme: source.theme || "dark",
       maskFields: [],
+      maskPatterns: [],
     },
   });
   const file = await generateHtml(report, output);

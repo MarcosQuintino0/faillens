@@ -169,3 +169,23 @@ test("maskSensitiveText — texto sem dados sensíveis não é alterado", () => 
   const safe = "GET /users HTTP/1.1 returned 200 in 45ms";
   assert.equal(maskSensitiveText(safe), safe);
 });
+
+test("maskPatterns — remove segredos em campos de texto genéricos", () => {
+  const result = maskSensitiveData({
+    message: "falha externa: recovery-code=ABC-123-SECRET",
+    debug: "safe",
+  }, { patterns: ["recovery-code=[A-Z0-9-]+"] });
+
+  assert.equal(result.message, "falha externa: ***");
+  assert.equal(result.debug, "safe");
+  assert.doesNotMatch(JSON.stringify(result), /ABC-123-SECRET/);
+});
+
+test("maskPatterns — aceita literal /regex/ serializado com flags", () => {
+  const text = maskSensitiveText(
+    "Código temporário: OTP-ABC123 e otp-def456",
+    { patterns: ["/otp-[a-z0-9]+/i"] },
+  );
+
+  assert.equal(text, "Código temporário: *** e ***");
+});

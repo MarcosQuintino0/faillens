@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const { generateCurl } = require("../../dist/collector/curlGenerator");
 const { maskSensitiveData } = require("../../dist/collector/sensitiveMask");
 const { buildReportModel } = require("../../dist/reporter/buildReportModel");
+const { buildEvidenceHtml, buildIssueContent } = require("../../dist/reporter/evidence");
 const { reportTemplate } = require("../../dist/templates/reportTemplate");
 
 function request(overrides = {}) {
@@ -130,4 +131,19 @@ test("BDD malicioso permanece dado inerte no HTML e não vira markup executável
   assert.match(report.specs[0].tests[0].bddScenario.text, /%3Cimg%20src=x%20onerror=PWNED%3E/);
   assert.doesNotMatch(html, /<img src=x onerror=PWNED>/i);
   assert.match(html, /%3Cimg%20src=x%20onerror=PWNED%3E/);
+});
+
+test("chamado rico escapa título, headers, bodies, falha e rastreabilidade", () => {
+  const report = buildReportModel([{ specPath: "<img src=x onerror=SPEC_PWNED>.cy.js", durationMs: 10, tests: [failedTest({
+    title: "<img src=x onerror=TITLE_PWNED>",
+    error: { name: "AssertionError", message: "<script>ERROR_PWNED</script>: expected 201 to equal 400", actual: 201, expected: 400 },
+    tags: ["<svg onload=TAG_PWNED>"],
+    requests: [request({ requestHeaders: { "x-test": "<img src=x onerror=HEADER_PWNED>" },
+      requestBody: { value: "<script>BODY_PWNED</script>" } })],
+  })] }]);
+  const issue = buildIssueContent(report.specs[0].tests[0], report.specs[0].specPath, report.contracts || []);
+  const html = buildEvidenceHtml(issue);
+  assert.doesNotMatch(html, /<(?:script|img|svg)[^>]*(?:PWNED|onerror|onload)/i);
+  assert.match(html, /&lt;img src=x onerror=TITLE_PWNED&gt;/);
+  assert.match(html, /&lt;script&gt;BODY_PWNED&lt;\/script&gt;/);
 });

@@ -20,7 +20,7 @@ URLs relativas usam `baseUrl`; URLs absolutas prevalecem. Métodos são normaliz
 
 ## Mascaramento
 
-Requests, responses, redirects, erros, assertions e cURL não podem persistir segredos. O mascaramento reconhece campos sensíveis, parâmetros de query, Bearer tokens, JWTs e JSON embutido em strings. Campos configurados em `maskFields` complementam os padrões.
+Requests, responses, redirects, erros, assertions e cURL não podem persistir segredos. O mascaramento reconhece campos sensíveis, parâmetros de query, Bearer tokens, JWTs e JSON embutido em strings. Campos configurados em `maskFields` complementam os padrões. `maskPatterns` remove trechos sensíveis em texto livre quando o segredo aparece dentro de campos genéricos como `message`, `debug` ou `detail`.
 
 - Implementação: `src/collector/sensitiveMask.ts`, `src/collector/requestStore.ts`, `src/reporter/buildReportModel.ts`
 - Testes: `test/unit/mask.test.js`, `test/integration/build-report.test.js`
@@ -125,7 +125,7 @@ Cada informação que o FailLens poderá usar em BDD, resultado atual, resultado
 
 ## BDD determinístico para chamados
 
-Testes falhos recebem `bddScenario`, construído sem IA a partir do modelo já sanitizado. Cada linha guarda keyword, texto e fontes rastreáveis. O cenário é exibido apenas na aba **Evidência para o dev** e incluído em **Copiar evidência**; testes aprovados não recebem BDD.
+Testes falhos recebem `bddScenario`, construído sem IA a partir do modelo já sanitizado. Cada linha guarda keyword, texto e fontes rastreáveis. O cenário é exibido apenas na aba **Criar chamado** e incluído em **Copiar chamado**; testes aprovados não recebem BDD.
 
 - `DADO`/`E` só descrevem entrada, autenticação, limite, tipo, ausência ou precondição comprovados por request/contrato.
 - `QUANDO` usa método e endpoint da request principal; uma operação contratual resolvida desempata setup e ação do mesmo método favorecendo a última ação compatível.
@@ -144,13 +144,15 @@ O HTML deve abrir offline e não pode usar CDN, scripts externos, fontes remotas
 - Implementação: `src/reporter/generateHtml.ts`, `src/templates/`
 - Testes: `test/integration/generate-html.test.js`, `test/integration/report-features.test.js`, `test/integration/visual-styling.test.js`
 
-## Evidência para o dev
+## Criar chamado
 
-O toolbar de detalhe possui, nesta ordem, `Chamada selecionada`, `Script de reprodução` e `Evidência para o dev`, com semântica ARIA e navegação por setas/Home/End. A evidência textual usa somente dados já sanitizados, o BDD determinístico quando disponível e o cURL da request principal.
+O toolbar de detalhe possui, nesta ordem, `Chamada selecionada`, `Script de reprodução` e `Criar chamado`, com semântica ARIA e navegação por setas/Home/End. A terceira aba compõe em memória, sem alterar o schema, as doze seções aprovadas: título, contexto, BDD, resultados atual/esperado, request, response, comparação, falha, cURL, evidência visual e rastreabilidade.
+
+O conteúdo usa somente o teste, contrato vinculado e dados capturados já sanitizados. Mensagem contratual só aparece quando a regra resolvida a declara; diagnóstico heurístico não vira fato. Sem contrato, categoria, localização ou screenshot, o documento degrada sem falhar. Não existe seção “Evidência de persistência”.
 
 O evento oficial `after:screenshot` registra metadata; a associação exige spec e título completo ou a janela temporal de uma tentativa. Imagens automáticas de falha vencem manuais e a tentativa falha mais recente aparece primeiro. Ausência, remoção posterior do arquivo e `screenshotOnRunFailure: false` não quebram o relatório.
 
-O clipboard tenta texto, HTML e PNG. Se a imagem ou a API moderna forem bloqueadas, copia texto/cURL/path relativo pelo fallback existente e informa o nível de sucesso confirmado.
+O botão **Copiar chamado** tenta texto, HTML e PNG. Se a imagem ou a API moderna forem bloqueadas, copia o chamado textual completo pelo fallback existente e informa o nível de sucesso confirmado.
 
 Ao abrir a aba, o cliente cria uma única prévia `<img>` lazy para o screenshot do teste selecionado. Essa mesma imagem alimenta a tentativa de canvas/clipboard; não há segundo carregamento oculto. Se o navegador bloquear o acesso programático aos pixels, a prévia ainda permite copiar pela ação nativa do navegador ou arrastar a imagem, sem embutir bytes no relatório.
 
